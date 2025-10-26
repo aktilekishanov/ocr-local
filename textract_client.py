@@ -4,7 +4,7 @@ import mimetypes
 import os
 import uuid
 import json
-from filter_textract_response import filter_textract_response
+from filter_textract_response import save_pages_json
  
 def call_fortebank_textract(pdf_path: str, ocr_engine: str = "textract") -> str:
     """
@@ -55,8 +55,9 @@ def ask_textract(pdf_path: str, output_dir: str = "output", save_json: bool = Tr
         with open(os.path.join(output_dir, "textract_response.json"), "w", encoding="utf-8") as f:
             f.write(raw)
     obj = json.loads(raw)
-    text = filter_textract_response(obj)
-    if save_text:
-        with open(os.path.join(output_dir, "textract_response_filtered.txt"), "w", encoding="utf-8") as out:
-            out.write(text)
-    return text
+    # Save pages JSON via centralized helper and return its path
+    try:
+        pages_path = save_pages_json(obj, output_dir, filename="textract_pages.json")
+    except Exception:
+        pages_path = ""
+    return pages_path

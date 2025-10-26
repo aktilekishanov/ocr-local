@@ -1,5 +1,6 @@
 import os
 import re
+import json
 from datetime import datetime
 from pathlib import Path
 import streamlit as st
@@ -120,11 +121,31 @@ if submitted:
 
         # Run Textract pipeline
         try:
-            text = ask_textract(str(saved_path), output_dir=str(OUTPUT_DIR), save_json=True, save_text=True)
+            pages_path = ask_textract(str(saved_path), output_dir=str(OUTPUT_DIR), save_json=True, save_text=True)
             st.success("Распознавание завершено.")
 
-            with st.expander("Показать распознанный текст", expanded=True):
-                st.text_area("Результат", value=text, height=400)
+            # Load pages JSON
+            with open(pages_path, "r", encoding="utf-8") as f:
+                pages_obj = json.load(f)
+            pages = pages_obj.get("pages", []) if isinstance(pages_obj, dict) else []
+
+            # Download button
+            with open(pages_path, "rb") as f:
+                st.download_button(
+                    label="Скачать JSON со страницами",
+                    data=f.read(),
+                    file_name=os.path.basename(pages_path),
+                    mime="application/json",
+                )
+
+            # Simple per-page preview
+            if pages:
+                page_numbers = [p.get("page_number") for p in pages]
+                default_index = 0
+                selected = st.selectbox("Страница", options=list(range(len(pages))), format_func=lambda i: f"Стр. {page_numbers[i] if page_numbers[i] is not None else i+1}", index=default_index)
+                st.text_area("Текст страницы", value=pages[selected].get("text", ""), height=400)
+            else:
+                st.info("Нет распознанных страниц в результате.")
         except Exception as e:
             st.error(f"Ошибка распознавания: {e}")
             st.exception(e)
