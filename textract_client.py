@@ -52,7 +52,7 @@ def ask_textract(pdf_path: str, output_dir: str = "output", save_json: bool = Tr
     raw = call_fortebank_textract(pdf_path)
     os.makedirs(output_dir, exist_ok=True)
     if save_json:
-        with open(os.path.join(output_dir, "textract_response.json"), "w", encoding="utf-8") as f:
+        with open(os.path.join(output_dir, "textract_response_raw.json"), "w", encoding="utf-8") as f:
             f.write(raw)
     obj = json.loads(raw)
     # Save pages JSON via centralized helper and return its path

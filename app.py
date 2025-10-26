@@ -205,9 +205,15 @@ if submitted:
                 st.text_area("Текст страницы", value=pages[selected].get("text", ""), height=400)
                 pages_json_str = json.dumps(pages_obj, ensure_ascii=False)
                 if pages_json_str:
-                    prompt = PROMPT_TEMPLATE.format(pages_json_str)
+                    prompt = PROMPT_TEMPLATE.replace("{}", pages_json_str, 1)
                     try:
                         gpt_raw = ask_gpt(prompt)
+                        # Save raw GPT response
+                        try:
+                            with open(OUTPUT_DIR / "gpt_response_raw.json", "w", encoding="utf-8") as gf:
+                                gf.write(gpt_raw)
+                        except Exception:
+                            pass
                         try:
                             gpt_json = json.loads(gpt_raw)
                             st.json(gpt_json)
