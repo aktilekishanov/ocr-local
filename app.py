@@ -6,11 +6,70 @@ from pathlib import Path
 import streamlit as st
 
 from textract_client import ask_textract
+from gpt_client import ask_gpt
 
 
 # --- Page setup ---
 st.set_page_config(page_title="RB Loan Deferment IDP", layout="centered")
 
+# PROMPT for GPT
+PROMPT_TEMPLATE = """
+You are an expert in multilingual document information extraction and normalization.
+Your task is to analyze a noisy OCR text that may contain both Kazakh and Russian fragments.
+
+
+Follow these steps precisely before producing the final JSON:
+
+
+STEP 1 — UNDERSTAND THE TASK
+You must extract the following information:
+- full_name: full name of the person (e.g. **Иванов Иван Иванович**)
+- doc_classification: if document matches one of the known templates, classify it as one of:
+  - "Лист временной нетрудоспособности (больничный лист)"
+  - "Приказ о выходе в декретный отпуск по уходу за ребенком"
+  - "Справка о выходе в декретный отпуск по уходу за ребенком"
+  - "Выписка из стационара (выписной эпикриз)"
+  - "Больничный лист на сопровождающего (если предусмотрено)"
+  - "Заключение врачебно-консультативной комиссии (ВКК)"
+  - "Справка об инвалидности"
+  - "Справка о степени утраты общей трудоспособности"
+  - "Приказ/Справка о расторжении трудового договора"
+  - "Справка о регистрации в качестве безработного"
+  - "Приказ работодателя о предоставлении отпуска без сохранения заработной платы"
+  - "Справка о неполучении доходов"
+  - "Уведомление о регистрации в качестве лица, ищущего работу"
+  - "Лица, зарегистрированные в качестве безработных"
+  - null
+- doc_date: main issuance date (convert to format DD.MM.YYYY)
+
+
+STEP 2 — EXTRACTION RULES
+- If several dates exist, choose the main issuance date (usually near header or "№").
+- Ignore duplicates or minor typos.
+- When the value is missing, set it strictly to `null`.
+- Do not invent or assume missing data.
+- If both Russian and Kazakh versions exist, output result in Russian.
+
+
+STEP 3 — THINK BEFORE ANSWERING
+Double-check:
+- Is full_name complete (Фамилия Имя Отчество)?
+- Is doc_date formatted as DD.MM.YYYY?
+- Are there exactly 3 keys in the final JSON?
+- Is doc_classification one of the allowed options or null?
+
+
+STEP 4 — OUTPUT STRICTLY IN THIS JSON FORMAT (no explanations, no extra text, no Markdown formatting, and no ```json formatting)
+{
+  "full_name": string | null,
+  "doc_classification": string | null,
+  "doc_date": string | null,
+}
+
+
+Text for analysis:
+{}
+"""
 st.write("")
 st.title("RB Loan Deferment IDP")
 st.write("Загрузите один файл для распознавания (локальная обработка через Textract endpoint).")
@@ -144,9 +203,20 @@ if submitted:
                 default_index = 0
                 selected = st.selectbox("Страница", options=list(range(len(pages))), format_func=lambda i: f"Стр. {page_numbers[i] if page_numbers[i] is not None else i+1}", index=default_index)
                 st.text_area("Текст страницы", value=pages[selected].get("text", ""), height=400)
+                pages_json_str = json.dumps(pages_obj, ensure_ascii=False)
+                if pages_json_str:
+                    prompt = PROMPT_TEMPLATE.format(pages_json_str)
+                    try:
+                        gpt_raw = ask_gpt(prompt)
+                        try:
+                            gpt_json = json.loads(gpt_raw)
+                            st.json(gpt_json)
+                        except Exception:
+                            st.code(gpt_raw, language="json")
+                    except Exception as e:
+                        st.error(f"Ошибка GPT: {e}")
             else:
                 st.info("Нет распознанных страниц в результате.")
         except Exception as e:
             st.error(f"Ошибка распознавания: {e}")
             st.exception(e)
-

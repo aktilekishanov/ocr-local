@@ -1,0 +1,1 @@
+py -m pip install streamlit --proxy=http://headproxy03.fortebank.com:8080py 
