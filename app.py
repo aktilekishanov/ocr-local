@@ -7,6 +7,7 @@ import streamlit as st
 
 from textract_client import ask_textract
 from gpt_client import ask_gpt
+from filter_gpt_response import filter_gpt_response
 
 
 # --- Page setup ---
@@ -214,11 +215,26 @@ if submitted:
                                 gf.write(gpt_raw)
                         except Exception:
                             pass
+                        # Filter and show/download the extracted fields
                         try:
-                            gpt_json = json.loads(gpt_raw)
-                            st.json(gpt_json)
+                            filtered_path = filter_gpt_response(str(OUTPUT_DIR / "gpt_response_raw.json"), str(OUTPUT_DIR))
+                            with open(filtered_path, "r", encoding="utf-8") as ff:
+                                filtered_obj = json.load(ff)
+                            st.json(filtered_obj)
+                            with open(filtered_path, "rb") as ff:
+                                st.download_button(
+                                    label="Скачать JSON (фильтрованный результат)",
+                                    data=ff.read(),
+                                    file_name=os.path.basename(filtered_path),
+                                    mime="application/json",
+                                )
                         except Exception:
-                            st.code(gpt_raw, language="json")
+                            # Fallback: show raw as JSON if possible, else code
+                            try:
+                                gpt_json = json.loads(gpt_raw)
+                                st.json(gpt_json)
+                            except Exception:
+                                st.code(gpt_raw, language="json")
                     except Exception as e:
                         st.error(f"Ошибка GPT: {e}")
             else:
