@@ -15,62 +15,80 @@ st.set_page_config(page_title="RB Loan Deferment IDP", layout="centered")
 
 # PROMPT for GPT
 PROMPT_TEMPLATE = """
-You are an expert in multilingual document information extraction and normalization.
-Your task is to analyze a noisy OCR text that may contain both Kazakh and Russian fragments.
+You are an expert in multilingual document information extraction and normalization. Your assignment is to analyze OCR text that may contain both Kazakh and Russian segments.
 
+Follow these steps precisely before producing the final JSON output:
 
-Follow these steps precisely before producing the final JSON:
+# 1. Understand the Task
+Extract the following fields:
+- full_name: The person’s full name (e.g., Иванов Иван Иванович), normalized according to standard Kazakh or Russian conventions for spelling, word order, and character set — even if the OCR source is error-prone.
+- doc_classification: If the document matches one of the known templates below, classify it exactly as one of these Russian strings. If none match, set it to null.
+- doc_date: Main issuance date, converted to DD.MM.YYYY format.
+- single_doc_type: Indicates whether exactly one distinct document type is present in the OCR text.
+- single_doc_type_confidence: Confidence score from 0 to 100 for the single_doc_type decision.
 
+## 1a. Allowed Values for doc_classification
+Choose **exactly one** of the following, or `null`:
+- "Лист временной нетрудоспособности (больничный лист)"
+- "Приказ о выходе в декретный отпуск по уходу за ребенком"
+- "Справка о выходе в декретный отпуск по уходу за ребенком"
+- "Выписка из стационара (выписной эпикриз)"
+- "Больничный лист на сопровождающего (если предусмотрено)"
+- "Заключение врачебно-консультативной комиссии (ВКК)"
+- "Справка об инвалидности"
+- "Справка о степени утраты общей трудоспособности"
+- "Приказ/Справка о расторжении трудового договора"
+- "Справка о регистрации в качестве безработного"
+- "Приказ работодателя о предоставлении отпуска без сохранения заработной платы"
+- "Справка о неполучении доходов"
+- "Уведомление о регистрации в качестве лица, ищущего работу"
+- "Лица, зарегистрированные в качестве безработных"
+- null
 
-STEP 1 — UNDERSTAND THE TASK
-You must extract the following information:
-- full_name: full name of the person (e.g. **Иванов Иван Иванович**)
-- doc_classification: if document matches one of the known templates, classify it as one of:
-  - "Лист временной нетрудоспособности (больничный лист)"
-  - "Приказ о выходе в декретный отпуск по уходу за ребенком"
-  - "Справка о выходе в декретный отпуск по уходу за ребенком"
-  - "Выписка из стационара (выписной эпикриз)"
-  - "Больничный лист на сопровождающего (если предусмотрено)"
-  - "Заключение врачебно-консультативной комиссии (ВКК)"
-  - "Справка об инвалидности"
-  - "Справка о степени утраты общей трудоспособности"
-  - "Приказ/Справка о расторжении трудового договора"
-  - "Справка о регистрации в качестве безработного"
-  - "Приказ работодателя о предоставлении отпуска без сохранения заработной платы"
-  - "Справка о неполучении доходов"
-  - "Уведомление о регистрации в качестве лица, ищущего работу"
-  - "Лица, зарегистрированные в качестве безработных"
-  - null
-- doc_date: main issuance date (convert to format DD.MM.YYYY)
+## 1b. Rules for Single Document Type Detection
+A *document type* refers to its purpose or function, not language or formatting.
+- If a document appears in multiple languages but shares the same stamp, signature, date, and number → single_doc_type = true.
+- If the text contains documents with differing purposes, issuers, or organizations → single_doc_type = false.
+- If uncertain → single_doc_type = false.
 
+Confidence estimation for single_doc_type:
+- 85–100: Clear single document (consistent wording, one header, one organization, single purpose).
+- 50–84: Likely single, but minor duplication or noise detected.
+- 0–49: Conflicting or multiple documents detected.
 
-STEP 2 — EXTRACTION RULES
-- If several dates exist, choose the main issuance date (usually near header or "№").
-- Ignore duplicates or minor typos.
-- When the value is missing, set it strictly to `null`.
-- Do not invent or assume missing data.
-- If both Russian and Kazakh versions exist, output result in Russian.
+# 2. Extraction Rules
+- If multiple dates occur, choose the principal issuance date (typically near the header or “№”).
+- Ignore duplicates and minor typos.
+- Never invent or infer missing data.
+- If both Russian and Kazakh versions occur, produce the result in Russian.
+- If several candidates for full_name are present, choose the most complete one (the longest sequence matching the Russian pattern: Фамилия Имя Отчество).
 
+# 3. Verification
+Before outputting, double-check:
+- full_name: Is it complete (Фамилия Имя Отчество)?
+- doc_date: Is it formatted as DD.MM.YYYY?
+- doc_classification: Is it one of the allowed values or null?
+- single_doc_type: Is it strictly 'true', 'false', or null (in lowercase)?
+- single_doc_type_confidence: Is it a number between 0 and 100?
+- Are all fields normalized and compliant with the previous guidance?
 
-STEP 3 — THINK BEFORE ANSWERING
-Double-check:
-- Is full_name complete (Фамилия Имя Отчество)?
-- Is doc_date formatted as DD.MM.YYYY?
-- Are there exactly 3 keys in the final JSON?
-- Is doc_classification one of the allowed options or null?
-
-
-STEP 4 — OUTPUT STRICTLY IN THIS JSON FORMAT (no explanations, no extra text, no Markdown formatting, and no ```json formatting)
+# 4. Output Format
+Return strictly a single JSON object with these fields in this order (no explanations, no extra text, no markdown, no ```json formatting):
 {
-  "full_name": string | null,
-  "doc_classification": string | null,
-  "doc_date": string | null,
+  "full_name": string | null,           
+  "doc_classification": string | null,  
+  "doc_date": string | null,            
+  "single_doc_type": true | false | null,
+  "single_doc_type_confidence": number
 }
+Do not add any text beyond this JSON object. Keep field order unchanged.
 
+After extracting and normalizing the data, validate each field as described. If any field does not meet its requirements, review and self-correct before outputting the final JSON.
 
 Text for analysis:
 {}
 """
+
 st.write("")
 st.title("RB Loan Deferment IDP")
 st.write("Загрузите один файл для распознавания (локальная обработка через Textract endpoint).")
