@@ -8,10 +8,9 @@ import streamlit as st
 
 from rbidp.clients.textract_client import ask_textract
 from rbidp.processors.filter_textract_response import filter_textract_response
-from rbidp.processors.filter_gpt_response import filter_gpt_response
+from rbidp.processors.filter_gpt_generic_response import filter_gpt_generic_response
 from rbidp.processors.agent_extractor import extract_doc_data
 from rbidp.processors.agent_doc_type_checker import check_single_doc_type
-from rbidp.processors.filter_doc_type_check_response import filter_doc_type_check_response
 
 
 def run_gpt_extractor(pages_obj: dict, gpt_dir: Path) -> dict:
@@ -30,7 +29,7 @@ def run_gpt_extractor(pages_obj: dict, gpt_dir: Path) -> dict:
 
 def run_filter_gpt(raw_path: str, gpt_dir: Path) -> dict:
     try:
-        filtered_path = filter_gpt_response(str(raw_path), str(gpt_dir))
+        filtered_path = filter_gpt_generic_response(str(raw_path), str(gpt_dir), filename="gpt_response_filtered.json")
         with open(filtered_path, "r", encoding="utf-8") as ff:
             filtered_obj = json.load(ff)
         return {"success": True, "error": None, "filtered_path": filtered_path, "obj": filtered_obj}
@@ -254,9 +253,9 @@ if submitted:
                 # Show doc type checker results (mirror GPT filter flow)
                 st.subheader("Проверка: единый тип документа")
                 dtc_raw_path = dtc_step.get("raw_path")
-                # Filter the doc type check raw into stable JSON
+                # Filter the doc type check raw into stable JSON (generic filter)
                 try:
-                    dtc_filtered_path = filter_doc_type_check_response(dtc_raw_path, str(gpt_dir), filename="doc_type_check_filtered.json")
+                    dtc_filtered_path = filter_gpt_generic_response(dtc_raw_path, str(gpt_dir), filename="doc_type_check_filtered.json")
                     with open(dtc_filtered_path, "r", encoding="utf-8") as dff:
                         dtc_filtered_obj = json.load(dff)
                     st.json(dtc_filtered_obj)
