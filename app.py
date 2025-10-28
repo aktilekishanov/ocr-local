@@ -16,7 +16,7 @@ from rbidp.processors.agent_doc_type_checker import check_single_doc_type
 def run_gpt_extractor(pages_obj: dict, gpt_dir: Path) -> dict:
     try:
         gpt_raw = extract_doc_data(pages_obj)
-        raw_path = gpt_dir / "gpt_response_raw.json"
+        raw_path = gpt_dir / "extractor_response_raw.json"
         try:
             with open(raw_path, "w", encoding="utf-8") as gf:
                 gf.write(gpt_raw)
@@ -29,7 +29,7 @@ def run_gpt_extractor(pages_obj: dict, gpt_dir: Path) -> dict:
 
 def run_filter_gpt(raw_path: str, gpt_dir: Path) -> dict:
     try:
-        filtered_path = filter_gpt_generic_response(str(raw_path), str(gpt_dir), filename="gpt_response_filtered.json")
+        filtered_path = filter_gpt_generic_response(str(raw_path), str(gpt_dir), filename="extractor_response_filtered.json")
         with open(filtered_path, "r", encoding="utf-8") as ff:
             filtered_obj = json.load(ff)
         return {"success": True, "error": None, "filtered_path": filtered_path, "obj": filtered_obj}
@@ -186,6 +186,19 @@ if submitted:
         # DEBUG: file save
         print(f"[DEBUG] Saved upload to: {saved_path}")
 
+        # Persist user input metadata early
+        try:
+            metadata = {
+                "fio": fio or None,
+                "reason": reason,
+                "doc_type": doc_type,
+            }
+            with open(meta_dir / "metadata.json", "w", encoding="utf-8") as mf:
+                json.dump(metadata, mf, ensure_ascii=False, indent=2)
+            print(f"[DEBUG] Early metadata written to: {meta_dir / 'metadata.json'}")
+        except Exception as e:
+            print(f"[DEBUG] Failed to write early metadata: {e}")
+
         # Run Textract pipeline
         try:
             textract_result = ask_textract(str(saved_path), output_dir=str(ocr_dir), save_json=True)
@@ -336,8 +349,8 @@ if submitted:
                         "ocr_pages_filtered_path": str(filtered_textract_response_path or ""),
                         "gpt_doc_type_check_filtered_path": str(gpt_dir / "doc_type_check_filtered.json"),
                         "gpt_doc_type_check_path": str((gpt_dir / "doc_type_check_raw.json")),
-                        "gpt_extractor_raw_path": str(gpt_dir / "gpt_response_raw.json"),
-                        "gpt_extractor_filtered_path": str(gpt_dir / "gpt_response_filtered.json"),
+                        "gpt_extractor_raw_path": str(gpt_dir / "extractor_response_raw.json"),
+                        "gpt_extractor_filtered_path": str(gpt_dir / "extractor_response_filtered.json"),
                     },
                     "status": "success",
                     "error": None,
