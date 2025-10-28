@@ -10,6 +10,7 @@ from rbidp.clients.textract_client import ask_textract
 from rbidp.processors.filter_textract_response import filter_textract_response
 from rbidp.processors.filter_gpt_response import filter_gpt_response
 from rbidp.processors.agent_extractor import extract_doc_data
+from rbidp.processors.agent_doc_type_checker import check_single_doc_type
 
 
 def run_gpt_extractor(pages_obj: dict, gpt_dir: Path) -> dict:
@@ -43,6 +44,28 @@ def run_filter_gpt(raw_path: str, gpt_dir: Path) -> dict:
                 return {"success": False, "error": str(e), "filtered_path": "", "obj": None, "raw": raw_str}
         except Exception:
             return {"success": False, "error": str(e), "filtered_path": "", "obj": None, "raw": ""}
+
+
+def run_doc_type_checker(pages_obj: dict, gpt_dir: Path) -> dict:
+    try:
+        raw = check_single_doc_type(pages_obj)
+        raw_path = gpt_dir / "doc_type_check_raw.json"
+        try:
+            with open(raw_path, "w", encoding="utf-8") as f:
+                f.write(raw)
+        except Exception:
+            pass
+        # attempt to parse and validate structure
+        try:
+            obj = json.loads(raw)
+            ok = isinstance(obj, dict) and isinstance(obj.get("single_doc_type"), bool)
+            if not ok:
+                return {"success": False, "error": "Invalid doc_type_check JSON schema.", "raw_path": str(raw_path), "obj": obj, "raw": raw}
+            return {"success": True, "error": None, "raw_path": str(raw_path), "obj": obj, "raw": raw}
+        except Exception as e:
+            return {"success": False, "error": f"JSON parse error: {e}", "raw_path": str(raw_path), "obj": None, "raw": raw}
+    except Exception as e:
+        return {"success": False, "error": str(e), "raw_path": "", "obj": None, "raw": ""}
 
 
 # --- Page setup ---
@@ -167,10 +190,21 @@ if submitted:
             f.write(uploaded_file.getbuffer())
 
         st.info(f"Файл сохранен: {saved_path}")
+        # DEBUG: file save
+        print(f"[DEBUG] Saved upload to: {saved_path}")
 
         # Run Textract pipeline
         try:
             textract_result = ask_textract(str(saved_path), output_dir=str(ocr_dir), save_json=True)
+            # DEBUG: textract call result
+            print(
+                "[DEBUG] Textract result:",
+                {
+                    "success": textract_result.get("success"),
+                    "error": textract_result.get("error"),
+                    "raw_path": textract_result.get("raw_path"),
+                },
+            )
 
             # Step 1: Textract status
             if not textract_result.get("success"):
@@ -179,60 +213,102 @@ if submitted:
                 st.stop()
 
             st.success("Распознавание завершено.")
+            # DEBUG: textract success
+            print("[DEBUG] Textract success: proceeding to filter_textract_response")
 
             # Step 2: Filter Textract into pages JSON
-            pages_path = ""
+            filtered_textract_response_path = ""
             try:
-                pages_path = filter_textract_response(textract_result.get("raw_obj", {}), str(ocr_dir), filename="textract_response_filtered.json")
+                filtered_textract_response_path = filter_textract_response(textract_result.get("raw_obj", {}), str(ocr_dir), filename="textract_response_filtered.json")
+                # DEBUG: filter output path
+                print(f"[DEBUG] Filtered Textract written to: {filtered_textract_response_path}")
             except Exception as e:
                 st.error(f"Ошибка обработки страниц OCR: {e}")
+                # DEBUG: filter error
+                print(f"[DEBUG] Error in filter_textract_response: {e}")
                 st.stop()
 
-            with open(pages_path, "r", encoding="utf-8") as f:
+            with open(filtered_textract_response_path, "r", encoding="utf-8") as f:
                 pages_obj = json.load(f)
-            pages = pages_obj.get("pages", []) if isinstance(pages_obj, dict) else []
+            # DEBUG: pages stats
+            try:
+                _pages_len = len(pages_obj.get("pages", [])) if isinstance(pages_obj, dict) else None
+            except Exception:
+                _pages_len = None
+            print(f"[DEBUG] pages_obj loaded. pages count: {_pages_len}")
 
-            # Download button
-            with open(pages_path, "rb") as f:
-                st.download_button(
-                    label="Скачать JSON со страницами",
-                    data=f.read(),
-                    file_name=os.path.basename(pages_path),
-                    mime="application/json",
-                )
+            # Filter step status checks before proceeding to GPT
+            if not isinstance(pages_obj, dict) or not isinstance(pages_obj.get("pages"), list):
+                st.error("Ошибка: некорректный формат результатов OCR страниц.")
+                st.stop()
+            if len(pages_obj["pages"]) == 0:
+                st.error("Ошибка: не удалось получить текст страниц из OCR.")
+                # DEBUG: empty pages
+                print("[DEBUG] No pages extracted from OCR")
+                st.stop()
 
-            # Simple per-page preview
-            if pages:
-                page_numbers = [p.get("page_number") for p in pages]
-                default_index = 0
-                selected = st.selectbox("Страница", options=list(range(len(pages))), format_func=lambda i: f"Стр. {page_numbers[i] if page_numbers[i] is not None else i+1}", index=default_index)
-                st.text_area("Текст страницы", value=pages[selected].get("text", ""), height=400)
-                if pages_obj:
-                    gpt_step = run_gpt_extractor(pages_obj, gpt_dir)
-                    if not gpt_step.get("success"):
-                        st.error(f"Ошибка GPT: {gpt_step.get('error')}")
-                        st.stop()
-                    filter_step = run_filter_gpt(gpt_step.get("raw_path", ""), gpt_dir)
-                    if filter_step.get("success"):
-                        st.json(filter_step.get("obj"))
-                        fp = filter_step.get("filtered_path")
-                        if fp:
-                            with open(fp, "rb") as ff:
-                                st.download_button(
-                                    label="Скачать JSON (фильтрованный результат)",
-                                    data=ff.read(),
-                                    file_name=os.path.basename(fp),
-                                    mime="application/json",
-                                )
-                    else:
-                        obj = filter_step.get("obj")
-                        raw = filter_step.get("raw", "")
-                        if isinstance(obj, dict):
-                            st.json(obj)
-                        elif raw:
-                            st.code(raw, language="json")
+            # Doc type checker step (before GPT)
+            # DEBUG: starting doc type checker
+            print("[DEBUG] Starting doc type checker with pages_obj")
+            dtc_step = run_doc_type_checker(pages_obj, gpt_dir)
+            if not dtc_step.get("success"):
+                st.error(f"Ошибка проверки типа документа: {dtc_step.get('error')}")
+                # DEBUG: doc type checker error
+                print(f"[DEBUG] Doc type checker error: {dtc_step.get('error')}")
+                st.stop()
+            else:
+                # Show doc type checker JSON and a download button
+                st.subheader("Проверка: единый тип документа")
+                st.json(dtc_step.get("obj"))
+                dtc_path = dtc_step.get("raw_path")
+                if dtc_path:
+                    with open(dtc_path, "rb") as df:
+                        st.download_button(
+                            label="Скачать JSON (doc_type_check)",
+                            data=df.read(),
+                            file_name=os.path.basename(dtc_path),
+                            mime="application/json",
+                        )
+                # DEBUG: doc type checker success
+                print(f"[DEBUG] Doc type checker success. path={dtc_path}")
+
+            # Run GPT steps when pages exist (no per-page preview UI)
+            if isinstance(pages_obj.get("pages"), list) and len(pages_obj["pages"]) > 0:
+                # DEBUG: starting GPT extractor
+                print("[DEBUG] Starting GPT extractor with pages_obj")
+                gpt_step = run_gpt_extractor(pages_obj, gpt_dir)
+                if not gpt_step.get("success"):
+                    st.error(f"Ошибка GPT: {gpt_step.get('error')}")
+                    # DEBUG: gpt extractor error
+                    print(f"[DEBUG] GPT extractor error: {gpt_step.get('error')}")
+                    st.stop()
+                filter_step = run_filter_gpt(gpt_step.get("raw_path", ""), gpt_dir)
+                if filter_step.get("success"):
+                    st.json(filter_step.get("obj"))
+                    fp = filter_step.get("filtered_path")
+                    if fp:
+                        with open(fp, "rb") as ff:
+                            st.download_button(
+                                label="Скачать JSON (фильтрованный результат)",
+                                data=ff.read(),
+                                file_name=os.path.basename(fp),
+                                mime="application/json",
+                            )
+                    # DEBUG: gpt filter success
+                    print(f"[DEBUG] GPT filter success. filtered_path={fp}")
+                else:
+                    obj = filter_step.get("obj")
+                    raw = filter_step.get("raw", "")
+                    if isinstance(obj, dict):
+                        st.json(obj)
+                    elif raw:
+                        st.code(raw, language="json")
+                    # DEBUG: gpt filter failure
+                    print("[DEBUG] GPT filter failed; showing fallback (obj or raw)")
             else:
                 st.info("Нет распознанных страниц в результате.")
+                # DEBUG: no pages to process
+                print("[DEBUG] Skipping GPT: no pages to process")
             try:
                 manifest = {
                     "run_id": run_id,
@@ -251,7 +327,8 @@ if submitted:
                     "processing": {
                         "ocr_engine": "textract",
                         "ocr_raw_path": str(ocr_dir / "textract_response_raw.json"),
-                        "ocr_pages_filtered_path": str(pages_path or ""),
+                        "ocr_pages_filtered_path": str(filtered_textract_response_path or ""),
+                        "gpt_doc_type_check_path": str((gpt_dir / "doc_type_check_raw.json")),
                         "gpt_raw_path": str(gpt_dir / "gpt_response_raw.json"),
                         "gpt_filtered_path": str(gpt_dir / "gpt_response_filtered.json"),
                     },
@@ -260,8 +337,12 @@ if submitted:
                 }
                 with open(meta_dir / "manifest.json", "w", encoding="utf-8") as mf:
                     json.dump(manifest, mf, ensure_ascii=False, indent=2)
+                # DEBUG: manifest written
+                print(f"[DEBUG] Manifest written to: {meta_dir / 'manifest.json'}")
             except Exception:
                 pass
         except Exception as e:
             st.error(f"Ошибка распознавания: {e}")
+            # DEBUG: outer exception
+            print(f"[DEBUG] Top-level processing error: {e}")
             st.exception(e)
