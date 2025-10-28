@@ -12,6 +12,7 @@ from rbidp.processors.filter_gpt_generic_response import filter_gpt_generic_resp
 from rbidp.processors.agent_extractor import extract_doc_data
 from rbidp.processors.agent_doc_type_checker import check_single_doc_type
 from rbidp.processors.merge_outputs import merge_extractor_and_doc_type
+from rbidp.processors.validator import validate_run
 
 
 def run_gpt_extractor(pages_obj: dict, gpt_dir: Path) -> dict:
@@ -300,15 +301,32 @@ if submitted:
                         )
                         with open(merged_path, "r", encoding="utf-8") as mf:
                             merged = json.load(mf)
-                        st.subheader("Итог")
-                        st.json(merged)
-                        with open(merged_path, "rb") as mb:
-                            st.download_button(
-                                label="Скачать JSON (итог)",
-                                data=mb.read(),
-                                file_name="merged.json",
-                                mime="application/json",
+                        # Validate merged.json against metadata.json
+                        try:
+                            validation = validate_run(
+                                meta_path=str((base_dir / "meta" / "metadata.json")),
+                                merged_path=str(merged_path),
+                                output_dir=str(gpt_dir),
+                                filename="validation.json",
                             )
+                            if not validation.get("success"):
+                                st.error(f"Ошибка валидации: {validation.get('error')}")
+                                st.stop()
+                            val_result = validation.get("result", {})
+                            validation_path = validation.get("validation_path", "")
+                            st.subheader("Результат проверки")
+                            st.json(val_result)
+                            with open(merged_path, "rb") as mb:
+                                st.download_button(
+                                    label="Скачать JSON (итог)",
+                                    data=mb.read(),
+                                    file_name="merged.json",
+                                    mime="application/json",
+                                )
+                            print(f"[DEBUG] Validation written to: {validation_path}")
+                        except Exception as ve:
+                            st.error(f"Ошибка валидации: {ve}")
+                            st.stop()
                         print(f"[DEBUG] Merged JSON written to: {merged_path}")
                     except Exception as me:
                         st.error(f"Ошибка при формировании merged.json: {me}")
@@ -346,6 +364,7 @@ if submitted:
                         "gpt_extractor_raw_path": str(gpt_dir / "gpt_extractor_response_raw.json"),
                         "gpt_extractor_filtered_path": str(gpt_dir / "gpt_extractor_response_filtered.json"),
                         "gpt_merged_path": str(gpt_dir / "merged.json"),
+                        "validation_path": str(gpt_dir / "validation.json"),
                     },
                     "status": "success",
                     "error": None,
