@@ -55,17 +55,10 @@ def run_doc_type_checker(pages_obj: dict, gpt_dir: Path) -> dict:
                 f.write(raw)
         except Exception:
             pass
-        # attempt to parse and validate structure
-        try:
-            obj = json.loads(raw)
-            ok = isinstance(obj, dict) and isinstance(obj.get("single_doc_type"), bool)
-            if not ok:
-                return {"success": False, "error": "Invalid doc_type_check JSON schema.", "raw_path": str(raw_path), "obj": obj, "raw": raw}
-            return {"success": True, "error": None, "raw_path": str(raw_path), "obj": obj, "raw": raw}
-        except Exception as e:
-            return {"success": False, "error": f"JSON parse error: {e}", "raw_path": str(raw_path), "obj": None, "raw": raw}
+        # Do not attempt to parse here; Forte GPT may return multiple JSON objects (e.g. "{}\n{}")
+        return {"success": True, "error": None, "raw_path": str(raw_path), "raw": raw}
     except Exception as e:
-        return {"success": False, "error": str(e), "raw_path": "", "obj": None, "raw": ""}
+        return {"success": False, "error": str(e), "raw_path": "", "raw": ""}
 
 
 # --- Page setup ---
