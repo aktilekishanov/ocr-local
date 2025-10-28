@@ -15,7 +15,7 @@ VALIDATION_MESSAGES = {
             True: "Верный формат документа",
             False: "Неверный формат документа",
         },
-        "is_valid_now": {
+        "doc_date_valid": {
             True: "Актуальная дата документа",
             False: "Устаревшая дата документа",
         },
@@ -69,28 +69,28 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
     fio_meta = _norm_text(meta.get("fio")) if isinstance(meta, dict) else ""
     doc_type_meta = _norm_text(meta.get("doc_type")) if isinstance(meta, dict) else ""
 
-    full_name = _norm_text(merged.get("full_name")) if isinstance(merged, dict) else ""
-    doc_class = _norm_text(merged.get("doc_classification")) if isinstance(merged, dict) else ""
+    fio = _norm_text(merged.get("fio")) if isinstance(merged, dict) else ""
+    doc_class = _norm_text(merged.get("doc_type")) if isinstance(merged, dict) else ""
     doc_date_raw = merged.get("doc_date") if isinstance(merged, dict) else None
     single_doc_type = merged.get("single_doc_type") if isinstance(merged, dict) else None
 
-    fio_match = bool(fio_meta and full_name and fio_meta == full_name)
+    fio_match = bool(fio_meta and fio and fio_meta == fio)
     doc_type_match = bool(doc_type_meta and doc_class and doc_type_meta == doc_class)
 
     d = _parse_doc_date(doc_date_raw)
     now = _now_utc_plus_5()
-    is_valid_now = False
+    doc_date_valid = False
     if d is not None:
         # assume doc date is local date at 00:00; compare inclusive 30 days window
         d_local = d.replace(tzinfo=timezone(timedelta(hours=5)))
-        is_valid_now = now <= (d_local + timedelta(days=30))
+        doc_date_valid = now <= (d_local + timedelta(days=30))
 
     single_doc_type_valid = bool(isinstance(single_doc_type, bool) and single_doc_type is True)
 
     checks = {
         "fio_match": fio_match,
         "doc_type_match": doc_type_match,
-        "is_valid_now": is_valid_now,
+        "doc_date_valid": doc_date_valid,
         "single_doc_type_valid": single_doc_type_valid,
     }
 
