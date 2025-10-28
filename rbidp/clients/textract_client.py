@@ -4,7 +4,7 @@ import mimetypes
 import os
 import uuid
 import json
-from filter_textract_response import filter_textract_response
+from rbidp.processors.filter_textract_response import filter_textract_response
  
 def call_fortebank_textract(pdf_path: str, ocr_engine: str = "textract") -> str:
     """
