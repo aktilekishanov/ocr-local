@@ -93,32 +93,12 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
         "single_doc_type_valid": single_doc_type_valid,
     }
 
-    messages = {
-        k: VALIDATION_MESSAGES["checks"][k][v] for k, v in checks.items()
-    }
-
     verdict = all(checks.values())
-    verdict_message = VALIDATION_MESSAGES["verdict"][verdict]
 
+    # Minimal result payload
     result = {
         "checks": checks,
-        "messages": messages,
         "verdict": verdict,
-        "verdict_message": verdict_message,
-        "details": {
-            "normalized": {
-                "fio_meta": fio_meta,
-                "full_name": full_name,
-                "doc_type_meta": doc_type_meta,
-                "doc_classification": doc_class,
-            },
-            "dates": {
-                "doc_date_raw": doc_date_raw,
-                "doc_date_parsed": d.isoformat() if d else None,
-                "now_utc_plus_5": now.isoformat(),
-                "valid_until": (d.replace(tzinfo=timezone(timedelta(hours=5))) + timedelta(days=30)).isoformat() if d else None,
-            },
-        },
     }
 
     try:
