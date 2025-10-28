@@ -72,7 +72,10 @@ def filter_gpt_generic_response(input_path: str, output_dir: str, filename: str)
             if isinstance(inner, dict):
                 result_obj = inner
                 break
-            # else, keep the dict as-is
+            # Skip provider prompt-echo dicts (they usually contain 'Model' and 'Content')
+            if "Model" in obj and "Content" in obj:
+                continue
+            # Otherwise, accept the dict as-is
             result_obj = obj
             break
         elif isinstance(obj, str):
