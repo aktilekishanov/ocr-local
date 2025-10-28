@@ -8,7 +8,7 @@ import streamlit as st
 
 from rbidp.clients.textract_client import ask_textract
 from rbidp.processors.filter_gpt_response import filter_gpt_response
-from rbidp.processors.extractor import extract_doc_data
+from rbidp.processors.agent_extractor import extract_doc_data
 
 
 # --- Page setup ---
