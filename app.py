@@ -11,6 +11,7 @@ from rbidp.processors.filter_textract_response import filter_textract_response
 from rbidp.processors.filter_gpt_response import filter_gpt_response
 from rbidp.processors.agent_extractor import extract_doc_data
 from rbidp.processors.agent_doc_type_checker import check_single_doc_type
+from rbidp.processors.filter_doc_type_check_response import filter_doc_type_check_response
 
 
 def run_gpt_extractor(pages_obj: dict, gpt_dir: Path) -> dict:
@@ -250,20 +251,33 @@ if submitted:
                 print(f"[DEBUG] Doc type checker error: {dtc_step.get('error')}")
                 st.stop()
             else:
-                # Show doc type checker JSON and a download button
+                # Show doc type checker results (mirror GPT filter flow)
                 st.subheader("Проверка: единый тип документа")
-                st.json(dtc_step.get("obj"))
-                dtc_path = dtc_step.get("raw_path")
-                if dtc_path:
-                    with open(dtc_path, "rb") as df:
+                dtc_raw_path = dtc_step.get("raw_path")
+                # Filter the doc type check raw into stable JSON
+                try:
+                    dtc_filtered_path = filter_doc_type_check_response(dtc_raw_path, str(gpt_dir), filename="doc_type_check_filtered.json")
+                    with open(dtc_filtered_path, "r", encoding="utf-8") as dff:
+                        dtc_filtered_obj = json.load(dff)
+                    st.json(dtc_filtered_obj)
+                    with open(dtc_filtered_path, "rb") as df:
                         st.download_button(
                             label="Скачать JSON (doc_type_check)",
                             data=df.read(),
-                            file_name=os.path.basename(dtc_path),
+                            file_name=os.path.basename(dtc_filtered_path),
                             mime="application/json",
                         )
-                # DEBUG: doc type checker success
-                print(f"[DEBUG] Doc type checker success. path={dtc_path}")
+                    # DEBUG: doc type filter success
+                    print(f"[DEBUG] Doc type filter success. filtered_path={dtc_filtered_path}")
+                except Exception as e:
+                    # Fallback: show raw content
+                    print(f"[DEBUG] Doc type filter failed: {e}")
+                    try:
+                        with open(dtc_raw_path, "r", encoding="utf-8") as rf:
+                            raw_str = rf.read()
+                        st.code(raw_str, language="json")
+                    except Exception:
+                        st.write("(no output)")
 
             # Run GPT steps when pages exist (no per-page preview UI)
             if isinstance(pages_obj.get("pages"), list) and len(pages_obj["pages"]) > 0:
@@ -321,6 +335,7 @@ if submitted:
                         "ocr_engine": "textract",
                         "ocr_raw_path": str(ocr_dir / "textract_response_raw.json"),
                         "ocr_pages_filtered_path": str(filtered_textract_response_path or ""),
+                        "gpt_doc_type_check_filtered_path": str(gpt_dir / "doc_type_check_filtered.json"),
                         "gpt_doc_type_check_path": str((gpt_dir / "doc_type_check_raw.json")),
                         "gpt_raw_path": str(gpt_dir / "gpt_response_raw.json"),
                         "gpt_filtered_path": str(gpt_dir / "gpt_response_filtered.json"),
