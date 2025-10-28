@@ -52,54 +52,32 @@ def _extract_from_openai_like(obj: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 def filter_doc_type_check_response(input_path: str, output_dir: str, filename: str = "doc_type_check_filtered.json") -> str:
     with open(input_path, "r", encoding="utf-8") as f:
-        raw = f.read().strip()
+        raw = f.read()
 
+    # Default result
     result_obj: Dict[str, Any] = {"single_doc_type": None}
 
-    # Case 1: try parse entire content as JSON or JSON-string
-    first = None
-    try:
-        first = json.loads(raw)
-    except Exception:
-        if raw and raw.lstrip().startswith("{") and raw.rstrip().endswith("}"):
-            try:
-                first = json.loads(raw)
-            except Exception:
-                first = None
-        else:
-            first = None
-
-    if isinstance(first, dict):
-        direct = _try_parse_bool_obj(raw)
+    # Assume provider writes two JSON lines: prompt echo, then OpenAI-like response
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        # Try OpenAI-like extraction first
+        extracted = _extract_from_openai_like(obj)
+        if extracted is not None:
+            result_obj = extracted
+            break
+        # Fallback to direct boolean object
+        direct = _try_parse_bool_obj(json.dumps(obj, ensure_ascii=False))
         if direct is not None:
             result_obj = direct
-        else:
-            inner = _extract_from_openai_like(first)
-            if inner is not None:
-                result_obj = inner
-    elif isinstance(first, str):
-        inner = _try_parse_bool_obj(first)
-        if inner is not None:
-            result_obj = inner
-
-    # Case 2: multi-line responses like "{}\n{}"
-    if result_obj.get("single_doc_type") is None:
-        for line in raw.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-                if isinstance(obj, dict):
-                    inner = _try_parse_bool_obj(json.dumps(obj, ensure_ascii=False))
-                    if inner is not None:
-                        result_obj = inner
-                        break
-            except Exception:
-                inner = _try_parse_bool_obj(line)
-                if inner is not None:
-                    result_obj = inner
-                    break
+            break
 
     os.makedirs(output_dir, exist_ok=True)
     out_path = os.path.join(output_dir, filename)
