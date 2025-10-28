@@ -7,8 +7,42 @@ import uuid
 import streamlit as st
 
 from rbidp.clients.textract_client import ask_textract
+from rbidp.processors.filter_textract_response import filter_textract_response
 from rbidp.processors.filter_gpt_response import filter_gpt_response
 from rbidp.processors.agent_extractor import extract_doc_data
+
+
+def run_gpt_extractor(pages_obj: dict, gpt_dir: Path) -> dict:
+    try:
+        gpt_raw = extract_doc_data(pages_obj)
+        raw_path = gpt_dir / "gpt_response_raw.json"
+        try:
+            with open(raw_path, "w", encoding="utf-8") as gf:
+                gf.write(gpt_raw)
+        except Exception:
+            pass
+        return {"success": True, "error": None, "raw_path": str(raw_path), "raw": gpt_raw}
+    except Exception as e:
+        return {"success": False, "error": str(e), "raw_path": "", "raw": ""}
+
+
+def run_filter_gpt(raw_path: str, gpt_dir: Path) -> dict:
+    try:
+        filtered_path = filter_gpt_response(str(raw_path), str(gpt_dir))
+        with open(filtered_path, "r", encoding="utf-8") as ff:
+            filtered_obj = json.load(ff)
+        return {"success": True, "error": None, "filtered_path": filtered_path, "obj": filtered_obj}
+    except Exception as e:
+        try:
+            with open(raw_path, "r", encoding="utf-8") as rf:
+                raw_str = rf.read()
+            try:
+                raw_obj = json.loads(raw_str)
+                return {"success": False, "error": str(e), "filtered_path": "", "obj": raw_obj, "raw": raw_str}
+            except Exception:
+                return {"success": False, "error": str(e), "filtered_path": "", "obj": None, "raw": raw_str}
+        except Exception:
+            return {"success": False, "error": str(e), "filtered_path": "", "obj": None, "raw": ""}
 
 
 # --- Page setup ---
@@ -136,10 +170,24 @@ if submitted:
 
         # Run Textract pipeline
         try:
-            pages_path = ask_textract(str(saved_path), output_dir=str(ocr_dir), save_json=True, save_text=True)
+            textract_result = ask_textract(str(saved_path), output_dir=str(ocr_dir), save_json=True)
+
+            # Step 1: Textract status
+            if not textract_result.get("success"):
+                err_msg = textract_result.get("error") or "OCR сервис вернул неуспешный статус."
+                st.error(f"Ошибка распознавания: {err_msg}")
+                st.stop()
+
             st.success("Распознавание завершено.")
 
-            # Load pages JSON
+            # Step 2: Filter Textract into pages JSON
+            pages_path = ""
+            try:
+                pages_path = filter_textract_response(textract_result.get("raw_obj", {}), str(ocr_dir), filename="textract_response_filtered.json")
+            except Exception as e:
+                st.error(f"Ошибка обработки страниц OCR: {e}")
+                st.stop()
+
             with open(pages_path, "r", encoding="utf-8") as f:
                 pages_obj = json.load(f)
             pages = pages_obj.get("pages", []) if isinstance(pages_obj, dict) else []
@@ -160,33 +208,29 @@ if submitted:
                 selected = st.selectbox("Страница", options=list(range(len(pages))), format_func=lambda i: f"Стр. {page_numbers[i] if page_numbers[i] is not None else i+1}", index=default_index)
                 st.text_area("Текст страницы", value=pages[selected].get("text", ""), height=400)
                 if pages_obj:
-                    try:
-                        gpt_raw = extract_doc_data(pages_obj)
-                        try:
-                            with open(gpt_dir / "gpt_response_raw.json", "w", encoding="utf-8") as gf:
-                                gf.write(gpt_raw)
-                        except Exception:
-                            pass
-                        try:
-                            filtered_path = filter_gpt_response(str(gpt_dir / "gpt_response_raw.json"), str(gpt_dir))
-                            with open(filtered_path, "r", encoding="utf-8") as ff:
-                                filtered_obj = json.load(ff)
-                            st.json(filtered_obj)
-                            with open(filtered_path, "rb") as ff:
+                    gpt_step = run_gpt_extractor(pages_obj, gpt_dir)
+                    if not gpt_step.get("success"):
+                        st.error(f"Ошибка GPT: {gpt_step.get('error')}")
+                        st.stop()
+                    filter_step = run_filter_gpt(gpt_step.get("raw_path", ""), gpt_dir)
+                    if filter_step.get("success"):
+                        st.json(filter_step.get("obj"))
+                        fp = filter_step.get("filtered_path")
+                        if fp:
+                            with open(fp, "rb") as ff:
                                 st.download_button(
                                     label="Скачать JSON (фильтрованный результат)",
                                     data=ff.read(),
-                                    file_name=os.path.basename(filtered_path),
+                                    file_name=os.path.basename(fp),
                                     mime="application/json",
                                 )
-                        except Exception:
-                            try:
-                                gpt_json = json.loads(gpt_raw)
-                                st.json(gpt_json)
-                            except Exception:
-                                st.code(gpt_raw, language="json")
-                    except Exception as e:
-                        st.error(f"Ошибка GPT: {e}")
+                    else:
+                        obj = filter_step.get("obj")
+                        raw = filter_step.get("raw", "")
+                        if isinstance(obj, dict):
+                            st.json(obj)
+                        elif raw:
+                            st.code(raw, language="json")
             else:
                 st.info("Нет распознанных страниц в результате.")
             try:

@@ -4,7 +4,6 @@ import mimetypes
 import os
 import uuid
 import json
-from rbidp.processors.filter_textract_response import filter_textract_response
  
 def call_fortebank_textract(pdf_path: str, ocr_engine: str = "textract") -> str:
     """
@@ -48,16 +47,29 @@ def call_fortebank_textract(pdf_path: str, ocr_engine: str = "textract") -> str:
  
     return result
 
-def ask_textract(pdf_path: str, output_dir: str = "output", save_json: bool = True, save_text: bool = True) -> str:
+def ask_textract(pdf_path: str, output_dir: str = "output", save_json: bool = True) -> dict:
     raw = call_fortebank_textract(pdf_path)
     os.makedirs(output_dir, exist_ok=True)
+    raw_path = os.path.join(output_dir, "textract_response_raw.json")
     if save_json:
-        with open(os.path.join(output_dir, "textract_response_raw.json"), "w", encoding="utf-8") as f:
+        with open(raw_path, "w", encoding="utf-8") as f:
             f.write(raw)
-    obj = json.loads(raw)
-    # Save pages JSON via centralized helper and return its path
+    # Parse raw JSON safely
+    obj = {}
+    parse_err = None
     try:
-        pages_path = filter_textract_response(obj, output_dir, filename="textract_response_filtered.json")
-    except Exception:
-        pages_path = ""
-    return pages_path
+        obj = json.loads(raw)
+    except Exception as e:
+        parse_err = str(e)
+        obj = {}
+    # Determine success and error message
+    success = bool(obj.get("success")) if isinstance(obj, dict) else False
+    error = None
+    if not success:
+        error = (obj.get("message") or obj.get("error") or parse_err or "Unknown OCR error") if isinstance(obj, dict) else (parse_err or "Unknown OCR error")
+    return {
+        "success": success,
+        "error": error,
+        "raw_path": raw_path,
+        "raw_obj": obj if isinstance(obj, dict) else {},
+    }
