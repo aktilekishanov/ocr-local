@@ -11,12 +11,13 @@ from rbidp.processors.filter_textract_response import filter_textract_response
 from rbidp.processors.filter_gpt_generic_response import filter_gpt_generic_response
 from rbidp.processors.agent_extractor import extract_doc_data
 from rbidp.processors.agent_doc_type_checker import check_single_doc_type
+from rbidp.processors.merge_outputs import merge_extractor_and_doc_type
 
 
 def run_gpt_extractor(pages_obj: dict, gpt_dir: Path) -> dict:
     try:
         gpt_raw = extract_doc_data(pages_obj)
-        raw_path = gpt_dir / "extractor_response_raw.json"
+        raw_path = gpt_dir / "gpt_extractor_response_raw.json"
         try:
             with open(raw_path, "w", encoding="utf-8") as gf:
                 gf.write(gpt_raw)
@@ -29,7 +30,7 @@ def run_gpt_extractor(pages_obj: dict, gpt_dir: Path) -> dict:
 
 def run_filter_gpt(raw_path: str, gpt_dir: Path) -> dict:
     try:
-        filtered_path = filter_gpt_generic_response(str(raw_path), str(gpt_dir), filename="extractor_response_filtered.json")
+        filtered_path = filter_gpt_generic_response(str(raw_path), str(gpt_dir), filename="gpt_extractor_response_filtered.json")
         with open(filtered_path, "r", encoding="utf-8") as ff:
             filtered_obj = json.load(ff)
         return {"success": True, "error": None, "filtered_path": filtered_path, "obj": filtered_obj}
@@ -49,7 +50,7 @@ def run_filter_gpt(raw_path: str, gpt_dir: Path) -> dict:
 def run_doc_type_checker(pages_obj: dict, gpt_dir: Path) -> dict:
     try:
         raw = check_single_doc_type(pages_obj)
-        raw_path = gpt_dir / "doc_type_check_raw.json"
+        raw_path = gpt_dir / "gpt_doc_type_check_raw.json"
         try:
             with open(raw_path, "w", encoding="utf-8") as f:
                 f.write(raw)
@@ -263,33 +264,16 @@ if submitted:
                 print(f"[DEBUG] Doc type checker error: {dtc_step.get('error')}")
                 st.stop()
             else:
-                # Show doc type checker results (mirror GPT filter flow)
-                st.subheader("Проверка: единый тип документа")
-                dtc_raw_path = dtc_step.get("raw_path")
                 # Filter the doc type check raw into stable JSON (generic filter)
+                dtc_raw_path = dtc_step.get("raw_path")
                 try:
-                    dtc_filtered_path = filter_gpt_generic_response(dtc_raw_path, str(gpt_dir), filename="doc_type_check_filtered.json")
-                    with open(dtc_filtered_path, "r", encoding="utf-8") as dff:
-                        dtc_filtered_obj = json.load(dff)
-                    st.json(dtc_filtered_obj)
-                    with open(dtc_filtered_path, "rb") as df:
-                        st.download_button(
-                            label="Скачать JSON (doc_type_check)",
-                            data=df.read(),
-                            file_name=os.path.basename(dtc_filtered_path),
-                            mime="application/json",
-                        )
+                    dtc_filtered_path = filter_gpt_generic_response(dtc_raw_path, str(gpt_dir), filename="gpt_doc_type_check_filtered.json")
                     # DEBUG: doc type filter success
                     print(f"[DEBUG] Doc type filter success. filtered_path={dtc_filtered_path}")
                 except Exception as e:
-                    # Fallback: show raw content
                     print(f"[DEBUG] Doc type filter failed: {e}")
-                    try:
-                        with open(dtc_raw_path, "r", encoding="utf-8") as rf:
-                            raw_str = rf.read()
-                        st.code(raw_str, language="json")
-                    except Exception:
-                        st.write("(no output)")
+                    st.error(f"Ошибка фильтра doc_type_check: {e}")
+                    st.stop()
 
             # Run GPT steps when pages exist (no per-page preview UI)
             if isinstance(pages_obj.get("pages"), list) and len(pages_obj["pages"]) > 0:
@@ -303,25 +287,35 @@ if submitted:
                     st.stop()
                 filter_step = run_filter_gpt(gpt_step.get("raw_path", ""), gpt_dir)
                 if filter_step.get("success"):
-                    st.json(filter_step.get("obj"))
                     fp = filter_step.get("filtered_path")
-                    if fp:
-                        with open(fp, "rb") as ff:
-                            st.download_button(
-                                label="Скачать JSON (фильтрованный результат)",
-                                data=ff.read(),
-                                file_name=os.path.basename(fp),
-                                mime="application/json",
-                            )
                     # DEBUG: gpt filter success
                     print(f"[DEBUG] GPT filter success. filtered_path={fp}")
+                    # Merge extractor filtered with doc type check filtered and present only merged
+                    try:
+                        merged_path = merge_extractor_and_doc_type(
+                            extractor_filtered_path=fp,
+                            doc_type_filtered_path=dtc_filtered_path,
+                            output_dir=str(gpt_dir),
+                            filename="merged.json",
+                        )
+                        with open(merged_path, "r", encoding="utf-8") as mf:
+                            merged = json.load(mf)
+                        st.subheader("Итог")
+                        st.json(merged)
+                        with open(merged_path, "rb") as mb:
+                            st.download_button(
+                                label="Скачать JSON (итог)",
+                                data=mb.read(),
+                                file_name="merged.json",
+                                mime="application/json",
+                            )
+                        print(f"[DEBUG] Merged JSON written to: {merged_path}")
+                    except Exception as me:
+                        st.error(f"Ошибка при формировании merged.json: {me}")
+                        st.stop()
                 else:
-                    obj = filter_step.get("obj")
-                    raw = filter_step.get("raw", "")
-                    if isinstance(obj, dict):
-                        st.json(obj)
-                    elif raw:
-                        st.code(raw, language="json")
+                    st.error(f"Ошибка фильтрации GPT: {filter_step.get('error')}")
+                    st.stop()
                     # DEBUG: gpt filter failure
                     print("[DEBUG] GPT filter failed; showing fallback (obj or raw)")
             else:
@@ -347,10 +341,11 @@ if submitted:
                         "ocr_engine": "textract",
                         "ocr_raw_path": str(ocr_dir / "textract_response_raw.json"),
                         "ocr_pages_filtered_path": str(filtered_textract_response_path or ""),
-                        "gpt_doc_type_check_filtered_path": str(gpt_dir / "doc_type_check_filtered.json"),
-                        "gpt_doc_type_check_path": str((gpt_dir / "doc_type_check_raw.json")),
-                        "gpt_extractor_raw_path": str(gpt_dir / "extractor_response_raw.json"),
-                        "gpt_extractor_filtered_path": str(gpt_dir / "extractor_response_filtered.json"),
+                        "gpt_doc_type_check_filtered_path": str(gpt_dir / "gpt_doc_type_check_filtered.json"),
+                        "gpt_doc_type_check_path": str((gpt_dir / "gpt_doc_type_check_raw.json")),
+                        "gpt_extractor_raw_path": str(gpt_dir / "gpt_extractor_response_raw.json"),
+                        "gpt_extractor_filtered_path": str(gpt_dir / "gpt_extractor_response_filtered.json"),
+                        "gpt_merged_path": str(gpt_dir / "merged.json"),
                     },
                     "status": "success",
                     "error": None,
