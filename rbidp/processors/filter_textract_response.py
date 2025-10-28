@@ -1,4 +1,6 @@
-def filter_textract_response(obj: dict, output_dir: str, filename: str = "textract_pages.json") -> str:
+from rbidp.core.config import TEXTRACT_PAGES
+
+def filter_textract_response(obj: dict, output_dir: str, filename: str = TEXTRACT_PAGES) -> str:
     """
     Build per-page text and save to JSON file {"pages": [{"page_number", "text"}, ...]}.
     Returns the full path to the saved file.

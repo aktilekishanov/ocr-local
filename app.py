@@ -13,12 +13,23 @@ from rbidp.processors.agent_extractor import extract_doc_data
 from rbidp.processors.agent_doc_type_checker import check_single_doc_type
 from rbidp.processors.merge_outputs import merge_extractor_and_doc_type
 from rbidp.processors.validator import validate_run
+from rbidp.core.config import (
+    TEXTRACT_RAW,
+    TEXTRACT_PAGES,
+    GPT_DOC_TYPE_RAW,
+    GPT_DOC_TYPE_FILTERED,
+    GPT_EXTRACTOR_RAW,
+    GPT_EXTRACTOR_FILTERED,
+    MERGED_FILENAME,
+    VALIDATION_FILENAME,
+    METADATA_FILENAME,
+)
 
 
 def run_gpt_extractor(pages_obj: dict, gpt_dir: Path) -> dict:
     try:
         gpt_raw = extract_doc_data(pages_obj)
-        raw_path = gpt_dir / "gpt_extractor_response_raw.json"
+        raw_path = gpt_dir / GPT_EXTRACTOR_RAW
         try:
             with open(raw_path, "w", encoding="utf-8") as gf:
                 gf.write(gpt_raw)
@@ -31,7 +42,7 @@ def run_gpt_extractor(pages_obj: dict, gpt_dir: Path) -> dict:
 
 def run_filter_gpt(raw_path: str, gpt_dir: Path) -> dict:
     try:
-        filtered_path = filter_gpt_generic_response(str(raw_path), str(gpt_dir), filename="gpt_extractor_response_filtered.json")
+        filtered_path = filter_gpt_generic_response(str(raw_path), str(gpt_dir), filename=GPT_EXTRACTOR_FILTERED)
         with open(filtered_path, "r", encoding="utf-8") as ff:
             filtered_obj = json.load(ff)
         return {"success": True, "error": None, "filtered_path": filtered_path, "obj": filtered_obj}
@@ -51,7 +62,7 @@ def run_filter_gpt(raw_path: str, gpt_dir: Path) -> dict:
 def run_doc_type_checker(pages_obj: dict, gpt_dir: Path) -> dict:
     try:
         raw = check_single_doc_type(pages_obj)
-        raw_path = gpt_dir / "gpt_doc_type_check_raw.json"
+        raw_path = gpt_dir / GPT_DOC_TYPE_RAW
         try:
             with open(raw_path, "w", encoding="utf-8") as f:
                 f.write(raw)
@@ -195,9 +206,9 @@ if submitted:
                 "reason": reason,
                 "doc_type": doc_type,
             }
-            with open(meta_dir / "metadata.json", "w", encoding="utf-8") as mf:
+            with open(meta_dir / METADATA_FILENAME, "w", encoding="utf-8") as mf:
                 json.dump(metadata, mf, ensure_ascii=False, indent=2)
-            print(f"[DEBUG] Early metadata written to: {meta_dir / 'metadata.json'}")
+            print(f"[DEBUG] Early metadata written to: {meta_dir / METADATA_FILENAME}")
         except Exception as e:
             print(f"[DEBUG] Failed to write early metadata: {e}")
 
@@ -227,7 +238,7 @@ if submitted:
             # Step 2: Filter Textract into pages JSON
             filtered_textract_response_path = ""
             try:
-                filtered_textract_response_path = filter_textract_response(textract_result.get("raw_obj", {}), str(ocr_dir), filename="textract_response_filtered.json")
+                filtered_textract_response_path = filter_textract_response(textract_result.get("raw_obj", {}), str(ocr_dir), filename=TEXTRACT_PAGES)
                 # DEBUG: filter output path
                 print(f"[DEBUG] Filtered Textract written to: {filtered_textract_response_path}")
             except Exception as e:
@@ -268,7 +279,7 @@ if submitted:
                 # Filter the doc type check raw into stable JSON (generic filter)
                 dtc_raw_path = dtc_step.get("raw_path")
                 try:
-                    dtc_filtered_path = filter_gpt_generic_response(dtc_raw_path, str(gpt_dir), filename="gpt_doc_type_check_filtered.json")
+                    dtc_filtered_path = filter_gpt_generic_response(dtc_raw_path, str(gpt_dir), filename=GPT_DOC_TYPE_FILTERED)
                     # DEBUG: doc type filter success
                     print(f"[DEBUG] Doc type filter success. filtered_path={dtc_filtered_path}")
                 except Exception as e:
@@ -297,7 +308,7 @@ if submitted:
                             extractor_filtered_path=fp,
                             doc_type_filtered_path=dtc_filtered_path,
                             output_dir=str(gpt_dir),
-                            filename="merged.json",
+                            filename=MERGED_FILENAME,
                         )
                         with open(merged_path, "r", encoding="utf-8") as mf:
                             merged = json.load(mf)
@@ -307,7 +318,7 @@ if submitted:
                                 meta_path=str((base_dir / "meta" / "metadata.json")),
                                 merged_path=str(merged_path),
                                 output_dir=str(gpt_dir),
-                                filename="validation.json",
+                                filename=VALIDATION_FILENAME,
                             )
                             if not validation.get("success"):
                                 st.error(f"Ошибка валидации: {validation.get('error')}")
@@ -320,7 +331,7 @@ if submitted:
                                 st.download_button(
                                     label="Скачать JSON (итог)",
                                     data=mb.read(),
-                                    file_name="merged.json",
+                                    file_name=MERGED_FILENAME,
                                     mime="application/json",
                                 )
                             print(f"[DEBUG] Validation written to: {validation_path}")
@@ -357,14 +368,14 @@ if submitted:
                     },
                     "processing": {
                         "ocr_engine": "textract",
-                        "ocr_raw_path": str(ocr_dir / "textract_response_raw.json"),
+                        "ocr_raw_path": str(ocr_dir / TEXTRACT_RAW),
                         "ocr_pages_filtered_path": str(filtered_textract_response_path or ""),
-                        "gpt_doc_type_check_filtered_path": str(gpt_dir / "gpt_doc_type_check_filtered.json"),
-                        "gpt_doc_type_check_path": str((gpt_dir / "gpt_doc_type_check_raw.json")),
-                        "gpt_extractor_raw_path": str(gpt_dir / "gpt_extractor_response_raw.json"),
-                        "gpt_extractor_filtered_path": str(gpt_dir / "gpt_extractor_response_filtered.json"),
-                        "gpt_merged_path": str(gpt_dir / "merged.json"),
-                        "validation_path": str(gpt_dir / "validation.json"),
+                        "gpt_doc_type_check_filtered_path": str(gpt_dir / GPT_DOC_TYPE_FILTERED),
+                        "gpt_doc_type_check_path": str((gpt_dir / GPT_DOC_TYPE_RAW)),
+                        "gpt_extractor_raw_path": str(gpt_dir / GPT_EXTRACTOR_RAW),
+                        "gpt_extractor_filtered_path": str(gpt_dir / GPT_EXTRACTOR_FILTERED),
+                        "gpt_merged_path": str(gpt_dir / MERGED_FILENAME),
+                        "validation_path": str(gpt_dir / VALIDATION_FILENAME),
                     },
                     "status": "success",
                     "error": None,

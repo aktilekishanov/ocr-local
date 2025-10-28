@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import os
 from typing import Dict, Any
 import re
+from rbidp.core.config import VALIDATION_FILENAME
 
 VALIDATION_MESSAGES = {
     "checks": {
@@ -56,7 +57,7 @@ def _now_utc_plus_5():
     return datetime.now(tz)
 
 
-def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: str = "validation.json") -> Dict[str, Any]:
+def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: str = VALIDATION_FILENAME) -> Dict[str, Any]:
     try:
         with open(meta_path, "r", encoding="utf-8") as mf:
             meta = json.load(mf)

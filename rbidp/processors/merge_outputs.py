@@ -1,13 +1,14 @@
 import json
 import os
 from typing import Dict, Any
+from rbidp.core.config import MERGED_FILENAME
 
 
 def merge_extractor_and_doc_type(
     extractor_filtered_path: str,
     doc_type_filtered_path: str,
     output_dir: str,
-    filename: str = "merged.json",
+    filename: str = MERGED_FILENAME,
 ) -> str:
     """
     Merge two JSON objects from given file paths and save to output_dir/filename.
