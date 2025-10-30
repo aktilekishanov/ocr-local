@@ -79,7 +79,7 @@ st.set_page_config(page_title="RB Loan Deferment IDP", layout="centered")
 
 st.write("")
 st.title("RB Loan Deferment IDP")
-st.write("Загрузите один файл для распознавания (локальная обработка через Textract (Dev-OCR) & GPT (DMZ)).")
+st.write("Загрузите один файл для распознавания (локальная обработка через Textract (Dev-OCR) & GPT (DMZ))")
 
 # --- Basic paths ---
 BASE_DIR = Path(__file__).resolve().parent
@@ -109,9 +109,9 @@ reasons_map = {
         "Лист временной нетрудоспособности (больничный лист)",
         "Выписка из стационара (выписной эпикриз)",
         "Больничный лист на сопровождающего (если предусмотрено)",
-        "Заключение врачебно-консультативной комиссии (ВКК).",
-        "Справка об инвалидности.",
-        "Справка о степени утраты общей трудоспособности.",
+        "Заключение врачебно-консультативной комиссии (ВКК)",
+        "Справка об инвалидности",
+        "Справка о степени утраты общей трудоспособности",
     ],
     "Уход заемщика в декретный отпуск": [
         "Лист временной нетрудоспособности (больничный лист)",
@@ -170,11 +170,11 @@ with st.form("upload_form", clear_on_submit=False):
 
 if submitted:
     if not uploaded_file:
-        st.warning("Пожалуйста, прикрепите файл.")
+        st.warning("Пожалуйста, прикрепите файл")
     elif reason == "Выберите причину":
-        st.warning("Пожалуйста, выберите причину отсрочки.")
+        st.warning("Пожалуйста, выберите причину отсрочки")
     elif doc_type == "Выберите тип документа":
-        st.warning("Пожалуйста, выберите тип документа.")
+        st.warning("Пожалуйста, выберите тип документа")
     else:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         short_id = uuid.uuid4().hex[:5]
@@ -227,7 +227,7 @@ if submitted:
 
             # Step 1: Textract status
             if not textract_result.get("success"):
-                err_msg = textract_result.get("error") or "OCR сервис вернул неуспешный статус."
+                err_msg = textract_result.get("error") or "OCR сервис вернул неуспешный статус"
                 status.update(label=f"Textract: Ошибка распознавания: {err_msg}", state="error")
                 st.error(f"Ошибка распознавания: {err_msg}")
                 st.stop()
@@ -268,10 +268,10 @@ if submitted:
 
             # Filter step status checks before proceeding to GPT
             if not isinstance(pages_obj, dict) or not isinstance(pages_obj.get("pages"), list):
-                st.error("Ошибка: некорректный формат результатов OCR страниц.")
+                st.error("Ошибка: некорректный формат результатов OCR страниц")
                 st.stop()
             if len(pages_obj["pages"]) == 0:
-                st.error("Ошибка: не удалось получить текст страниц из OCR.")
+                st.error("Ошибка: не удалось получить текст страниц из OCR")
                 # DEBUG: empty pages
                 print("[DEBUG] No pages extracted from OCR")
                 st.stop()
@@ -380,7 +380,7 @@ if submitted:
                         st.error(f"Ошибка при формировании merged.json: {me}")
                         st.stop()
             else:
-                st.info("Нет распознанных страниц в результате.")
+                st.info("Нет распознанных страниц в результате")
                 # DEBUG: no pages to process
                 print("[DEBUG] Skipping GPT: no pages to process")
             try:
