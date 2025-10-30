@@ -4,6 +4,7 @@ import os
 from typing import Dict, Any
 import re
 from rbidp.core.config import VALIDATION_FILENAME
+from rbidp.processors.filter_gpt_generic_response import filter_gpt_generic_response
 from rbidp.clients.gpt_client import ask_gpt
 
 VALIDATION_MESSAGES = {
@@ -80,9 +81,15 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
         f"meta: {json.dumps(meta, ensure_ascii=False)}\n"
         f"merged: {json.dumps(merged, ensure_ascii=False)}\n"
     )
+    os.makedirs(output_dir, exist_ok=True)
     gpt_raw = ask_gpt(prompt)
     try:
-        gpt_obj = json.loads(gpt_raw)
+        raw_path = os.path.join(output_dir, "validation_gpt_raw.txt")
+        with open(raw_path, "w", encoding="utf-8") as rf:
+            rf.write(gpt_raw)
+        filtered_path = filter_gpt_generic_response(raw_path, output_dir, filename="validation_gpt_filtered.json")
+        with open(filtered_path, "r", encoding="utf-8") as ff:
+            gpt_obj = json.load(ff)
     except Exception as e:
         return {"success": False, "error": f"Validation GPT parse error: {e}", "validation_path": "", "result": None}
 
@@ -102,7 +109,6 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
     }
 
     try:
-        os.makedirs(output_dir, exist_ok=True)
         out_path = os.path.join(output_dir, filename)
         with open(out_path, "w", encoding="utf-8") as vf:
             json.dump(result, vf, ensure_ascii=False, indent=2)
