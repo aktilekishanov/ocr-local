@@ -82,7 +82,8 @@ st.title("RB Loan Deferment IDP")
 st.write("Загрузите один файл для распознавания (локальная обработка через Textract (Dev-OCR) & GPT (DMZ)).")
 
 # --- Basic paths ---
-RUNS_DIR = Path("runs")
+BASE_DIR = Path(__file__).resolve().parent
+RUNS_DIR = BASE_DIR / "runs"
 RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
 # --- Simple CSS tweaks ---
