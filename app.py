@@ -79,7 +79,7 @@ st.set_page_config(page_title="RB Loan Deferment IDP", layout="centered")
 
 st.write("")
 st.title("RB Loan Deferment IDP")
-st.write("Загрузите один файл для распознавания (локальная обработка через Textract endpoint).")
+st.write("Загрузите один файл для распознавания (локальная обработка через Textract (Dev-OCR) & GPT (DMZ)).")
 
 # --- Basic paths ---
 RUNS_DIR = Path("runs")
@@ -331,7 +331,7 @@ if submitted:
                         # DEBUG: gpt filter failure
                         print("[DEBUG] GPT filter failed; showing fallback (obj or raw)")
 
-                with st.status("Слияние результатов и валидация...", state="running") as status_merge:
+                with st.status("Валидация: проверка...", state="running") as status_merge:
                     try:
                         merged_path = merge_extractor_and_doc_type(
                             extractor_filtered_path=fp,
@@ -350,7 +350,7 @@ if submitted:
                                 filename=VALIDATION_FILENAME,
                             )
                             if not validation.get("success"):
-                                status_merge.update(label=f"Ошибка валидации: {validation.get('error')}", state="error")
+                                status_merge.update(label=f"Валидация завершена с ошибкой: {validation.get('error')}", state="error")
                                 st.error(f"Ошибка валидации: {validation.get('error')}")
                                 st.stop()
                             val_result = validation.get("result", {})
@@ -366,11 +366,11 @@ if submitted:
                                 )
                             print(f"[DEBUG] Validation written to: {validation_path}")
                             try:
-                                status_merge.update(label="Слияние и валидация завершены", state="complete")
+                                status_merge.update(label="Валидация успешно завершена", state="complete")
                             except Exception:
                                 pass
                         except Exception as ve:
-                            status_merge.update(label=f"Ошибка валидации: {ve}", state="error")
+                            status_merge.update(label=f"Валидация завершена с ошибкой: {ve}", state="error")
                             st.error(f"Ошибка валидации: {ve}")
                             st.stop()
                         print(f"[DEBUG] Merged JSON written to: {merged_path}")
