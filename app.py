@@ -82,11 +82,7 @@ st.title("RB Loan Deferment IDP")
 st.write("Загрузите один файл для распознавания (локальная обработка через Textract endpoint).")
 
 # --- Basic paths ---
-INPUT_DIR = Path("input")
-OUTPUT_DIR = Path("output")
 RUNS_DIR = Path("runs")
-INPUT_DIR.mkdir(parents=True, exist_ok=True)
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
 # --- Simple CSS tweaks ---
