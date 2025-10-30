@@ -33,6 +33,20 @@ VALIDATION_MESSAGES = {
 }
 
 
+PROMPT = (
+    "You are a strict JSON validator. Compare two JSON objects: 'meta' and 'merged'.\n"
+    "Return ONLY a minified JSON object with exact keys: {\"fio_match\": boolean, \"doc_type_match\": boolean, \"doc_date_valid\": boolean, \"single_doc_type_valid\": boolean}. No extra keys or text.\n"
+    "Normalization rules: lowercase, trim, collapse whitespace.\n"
+    "fio_match: true if meta.fio equals merged.fio after normalization; else false.\n"
+    "doc_type_match: true if meta.doc_type equals merged.doc_type after normalization; else false.\n"
+    "doc_date_valid: merged.doc_date is within 30 days from CURRENT_TIME (UTC+05:00), formats may be DD.MM.YYYY or YYYY-MM-DD or DD/MM/YYYY; else false.\n"
+    "single_doc_type_valid: true if merged.single_doc_type is strictly true; else false.\n"
+    "CURRENT_TIME: {CURRENT_TIME} (UTC+05:00).\n"
+    "meta: {META}\n"
+    "merged: {MERGED}\n"
+)
+
+
 def _norm_text(s: Any) -> str:
     if not isinstance(s, str):
         return ""
@@ -69,17 +83,10 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
         return {"success": False, "error": f"IO error: {e}", "validation_path": "", "result": None}
 
     now = _now_utc_plus_5()
-    prompt = (
-        "You are a strict JSON validator. Compare two JSON objects: 'meta' and 'merged'.\n"
-        "Return ONLY a minified JSON object with exact keys: {\"fio_match\": boolean, \"doc_type_match\": boolean, \"doc_date_valid\": boolean, \"single_doc_type_valid\": boolean}. No extra keys or text.\n"
-        "Normalization rules: lowercase, trim, collapse whitespace.\n"
-        "fio_match: true if meta.fio equals merged.fio after normalization; else false.\n"
-        "doc_type_match: true if meta.doc_type equals merged.doc_type after normalization; else false.\n"
-        "doc_date_valid: merged.doc_date is within 30 days from CURRENT_TIME (UTC+05:00), formats may be DD.MM.YYYY or YYYY-MM-DD or DD/MM/YYYY; else false.\n"
-        "single_doc_type_valid: true if merged.single_doc_type is strictly true; else false.\n"
-        f"CURRENT_TIME: {now.isoformat()} (UTC+05:00).\n"
-        f"meta: {json.dumps(meta, ensure_ascii=False)}\n"
-        f"merged: {json.dumps(merged, ensure_ascii=False)}\n"
+    prompt = PROMPT.format(
+        CURRENT_TIME=now.isoformat(),
+        META=json.dumps(meta, ensure_ascii=False),
+        MERGED=json.dumps(merged, ensure_ascii=False),
     )
     os.makedirs(output_dir, exist_ok=True)
     gpt_raw = ask_gpt(prompt)
