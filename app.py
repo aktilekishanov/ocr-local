@@ -118,7 +118,8 @@ reasons_map = {
         "Справка о выходе в декретный отпуск по уходу за ребенком",
     ],
     "Потеря дохода заемщика (увольнение, сокращение, отпуск без содержания и т.д.)": [
-        "Приказ/Справка о расторжении трудового договора",
+        "Приказ о расторжении трудового договора",
+        "Справка о расторжении трудового договора",
         "Справка о регистрации в качестве безработного",
         "Приказ работодателя о предоставлении отпуска без сохранения заработной платы",
         "Справка о неполучении доходов",
@@ -188,12 +189,11 @@ if submitted:
 
         base = _safe_filename(uploaded_file.name)
         saved_path = input_dir / base
-        with st.status("Сохраняем файл...", state="running") as status:
+        with st.status("Сохраняем файл...", state="running", key="pipeline_status") as status:
             with open(saved_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
             status.update(label=f"Файл сохранен: {saved_path}", state="complete")
 
-        st.info(f"Файл сохранен: {saved_path}")
         # DEBUG: file save
         print(f"[DEBUG] Saved upload to: {saved_path}")
 
@@ -212,7 +212,7 @@ if submitted:
 
         # Run Textract pipeline
         try:
-            with st.status("Распознавание (Textract)...", state="running") as status:
+            with st.status("Распознавание (Textract)...", state="running", key="pipeline_status") as status:
                 textract_result = ask_textract(str(saved_path), output_dir=str(ocr_dir), save_json=True)
             # DEBUG: textract call result
             print(
@@ -230,8 +230,6 @@ if submitted:
                 status.update(label=f"Ошибка распознавания: {err_msg}", state="error")
                 st.error(f"Ошибка распознавания: {err_msg}")
                 st.stop()
-
-            st.success("Распознавание завершено.")
             try:
                 status.update(label="Распознавание завершено", state="complete")
             except Exception:
@@ -241,7 +239,7 @@ if submitted:
 
             # Step 2: Filter Textract into pages JSON
             filtered_textract_response_path = ""
-            with st.status("Обработка страниц OCR...", state="running") as status:
+            with st.status("Обработка страниц OCR...", state="running", key="pipeline_status") as status:
                 try:
                     filtered_textract_response_path = filter_textract_response(textract_result.get("raw_obj", {}), str(ocr_dir), filename=TEXTRACT_PAGES)
                     # DEBUG: filter output path
@@ -279,7 +277,7 @@ if submitted:
             # Doc type checker step (before GPT)
             # DEBUG: starting doc type checker
             print("[DEBUG] Starting doc type checker with pages_obj")
-            with st.status("Проверка типа документа...", state="running") as status:
+            with st.status("Проверка типа документа...", state="running", key="pipeline_status") as status:
                 dtc_step = run_doc_type_checker(pages_obj, gpt_dir)
                 if not dtc_step.get("success"):
                     status.update(label=f"Ошибка проверки типа документа: {dtc_step.get('error')}", state="error")
@@ -308,7 +306,7 @@ if submitted:
             if isinstance(pages_obj.get("pages"), list) and len(pages_obj["pages"]) > 0:
                 # DEBUG: starting GPT extractor
                 print("[DEBUG] Starting GPT extractor with pages_obj")
-                with st.status("GPT извлечение данных...", state="running") as status_gpt:
+                with st.status("GPT извлечение данных...", state="running", key="pipeline_status") as status_gpt:
                     gpt_step = run_gpt_extractor(pages_obj, gpt_dir)
                     if not gpt_step.get("success"):
                         status_gpt.update(label=f"Ошибка GPT: {gpt_step.get('error')}", state="error")
@@ -332,7 +330,7 @@ if submitted:
                         # DEBUG: gpt filter failure
                         print("[DEBUG] GPT filter failed; showing fallback (obj or raw)")
 
-                with st.status("Слияние результатов и валидация...", state="running") as status_merge:
+                with st.status("Слияние результатов и валидация...", state="running", key="pipeline_status") as status_merge:
                     try:
                         merged_path = merge_extractor_and_doc_type(
                             extractor_filtered_path=fp,
