@@ -60,6 +60,22 @@ def _now_utc_plus_5():
     tz = timezone(timedelta(hours=5))
     return datetime.now(tz)
 
+def kz_to_ru(s: str) -> str:
+    table = str.maketrans({
+        "қ": "к",
+        "ұ": "у",
+        "ү": "у", 
+        "ң": "н",
+        "ғ": "г",
+        "ө": "о",
+        "Қ": "К",
+        "Ұ": "У",
+        "Ү": "У",
+        "Ң": "Н",
+        "Ғ": "Г",
+        "Ө": "О",
+    })
+    return s.translate(table)
 
 def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: str = VALIDATION_FILENAME) -> Dict[str, Any]:
     try:
@@ -70,8 +86,17 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
     except Exception as e:
         return {"success": False, "error": f"IO error: {e}", "validation_path": "", "result": None}
 
+
     fio_meta = _norm_text(meta.get("fio")) if isinstance(meta, dict) else ""
     doc_type_meta = _norm_text(meta.get("doc_type")) if isinstance(meta, dict) else ""
+
+    fio_meta_ru = kz_to_ru(fio_meta)
+
+    # for debugging (delete later)
+    score_after = fuzz.token_sort_ratio(fio_meta_ru, fio)
+    score_before = fuzz.token_sort_ratio(fio_meta, fio)
+    print(f"FIO score after kz_to_ru: {score_after}\n")
+    print(f"FIO score before kz_to_ru: {score_before}\n")
 
     fio = _norm_text(merged.get("fio")) if isinstance(merged, dict) else ""
     doc_class = _norm_text(merged.get("doc_type")) if isinstance(merged, dict) else ""
@@ -82,12 +107,12 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
     if fio_meta and fio:
         if fuzz is not None:
             try:
-                score = fuzz.token_sort_ratio(fio_meta, fio)
+                score = fuzz.token_sort_ratio(fio_meta_ru, fio)
                 fio_match = score >= 90
             except Exception:
-                fio_match = fio_meta == fio
+                fio_match = fio_meta_ru == fio
         else:
-            fio_match = fio_meta == fio
+            fio_match = fio_meta_ru == fio
     else:
         fio_match = False
     doc_type_match = bool(doc_type_meta and doc_class and doc_type_meta == doc_class)
