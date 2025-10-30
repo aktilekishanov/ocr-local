@@ -193,9 +193,9 @@ if submitted:
             with open(saved_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
             status.update(label=f"Файл сохранен: {saved_path}", state="complete")
-            
-            # DEBUG: file save
-            print(f"[DEBUG] Saved upload to: {saved_path}")
+
+        # DEBUG: file save
+        print(f"[DEBUG] Saved upload to: {saved_path}")
 
         # Persist user input metadata early
         try:
@@ -230,6 +230,7 @@ if submitted:
                 status.update(label=f"Ошибка распознавания: {err_msg}", state="error")
                 st.error(f"Ошибка распознавания: {err_msg}")
                 st.stop()
+
             try:
                 status.update(label="Распознавание завершено", state="complete")
             except Exception:
@@ -306,10 +307,10 @@ if submitted:
             if isinstance(pages_obj.get("pages"), list) and len(pages_obj["pages"]) > 0:
                 # DEBUG: starting GPT extractor
                 print("[DEBUG] Starting GPT extractor with pages_obj")
-                with st.status("GPT извлечение данных...", state="running") as status:
+                with st.status("GPT извлечение данных...", state="running") as status_gpt:
                     gpt_step = run_gpt_extractor(pages_obj, gpt_dir)
                     if not gpt_step.get("success"):
-                        status.update(label=f"Ошибка GPT: {gpt_step.get('error')}", state="error")
+                        status_gpt.update(label=f"Ошибка GPT: {gpt_step.get('error')}", state="error")
                         st.error(f"Ошибка GPT: {gpt_step.get('error')}")
                         # DEBUG: gpt extractor error
                         print(f"[DEBUG] GPT extractor error: {gpt_step.get('error')}")
@@ -320,17 +321,17 @@ if submitted:
                         # DEBUG: gpt filter success
                         print(f"[DEBUG] GPT filter success. filtered_path={fp}")
                         try:
-                            status.update(label="GPT извлечение завершено", state="complete")
+                            status_gpt.update(label="GPT извлечение завершено", state="complete")
                         except Exception:
                             pass
                     else:
-                        status.update(label=f"Ошибка фильтрации GPT: {filter_step.get('error')}", state="error")
+                        status_gpt.update(label=f"Ошибка фильтрации GPT: {filter_step.get('error')}", state="error")
                         st.error(f"Ошибка фильтрации GPT: {filter_step.get('error')}")
                         st.stop()
                         # DEBUG: gpt filter failure
                         print("[DEBUG] GPT filter failed; showing fallback (obj or raw)")
 
-                with st.status("Слияние результатов и валидация...", state="running") as status:
+                with st.status("Слияние результатов и валидация...", state="running") as status_merge:
                     try:
                         merged_path = merge_extractor_and_doc_type(
                             extractor_filtered_path=fp,
@@ -349,7 +350,7 @@ if submitted:
                                 filename=VALIDATION_FILENAME,
                             )
                             if not validation.get("success"):
-                                status.update(label=f"Ошибка валидации: {validation.get('error')}", state="error")
+                                status_merge.update(label=f"Ошибка валидации: {validation.get('error')}", state="error")
                                 st.error(f"Ошибка валидации: {validation.get('error')}")
                                 st.stop()
                             val_result = validation.get("result", {})
@@ -365,16 +366,16 @@ if submitted:
                                 )
                             print(f"[DEBUG] Validation written to: {validation_path}")
                             try:
-                                status.update(label="Слияние и валидация завершены", state="complete")
+                                status_merge.update(label="Слияние и валидация завершены", state="complete")
                             except Exception:
                                 pass
                         except Exception as ve:
-                            status.update(label=f"Ошибка валидации: {ve}", state="error")
+                            status_merge.update(label=f"Ошибка валидации: {ve}", state="error")
                             st.error(f"Ошибка валидации: {ve}")
                             st.stop()
                         print(f"[DEBUG] Merged JSON written to: {merged_path}")
                     except Exception as me:
-                        status.update(label=f"Ошибка при формировании merged.json: {me}", state="error")
+                        status_merge.update(label=f"Ошибка при формировании merged.json: {me}", state="error")
                         st.error(f"Ошибка при формировании merged.json: {me}")
                         st.stop()
             else:
