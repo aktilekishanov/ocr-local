@@ -212,7 +212,7 @@ if submitted:
 
         # Run Textract pipeline
         try:
-            with st.status("Распознавание (Textract)...", state="running") as status:
+            with st.status("Textract: Распознавание...", state="running") as status:
                 textract_result = ask_textract(str(saved_path), output_dir=str(ocr_dir), save_json=True)
             # DEBUG: textract call result
             print(
@@ -227,12 +227,12 @@ if submitted:
             # Step 1: Textract status
             if not textract_result.get("success"):
                 err_msg = textract_result.get("error") or "OCR сервис вернул неуспешный статус."
-                status.update(label=f"Ошибка распознавания: {err_msg}", state="error")
+                status.update(label=f"Textract: Ошибка распознавания: {err_msg}", state="error")
                 st.error(f"Ошибка распознавания: {err_msg}")
                 st.stop()
 
             try:
-                status.update(label="Распознавание завершено", state="complete")
+                status.update(label="Textract: Распознавание успешно завершено", state="complete")
             except Exception:
                 pass
             # DEBUG: textract success
@@ -240,13 +240,13 @@ if submitted:
 
             # Step 2: Filter Textract into pages JSON
             filtered_textract_response_path = ""
-            with st.status("Обработка страниц OCR...", state="running") as status:
+            with st.status("Textract: Фильтрация...", state="running") as status:
                 try:
                     filtered_textract_response_path = filter_textract_response(textract_result.get("raw_obj", {}), str(ocr_dir), filename=TEXTRACT_PAGES)
                     # DEBUG: filter output path
                     print(f"[DEBUG] Filtered Textract written to: {filtered_textract_response_path}")
                 except Exception as e:
-                    status.update(label=f"Ошибка обработки страниц OCR: {e}", state="error")
+                    status.update(label=f"Textract: Ошибка фильтрации: {e}", state="error")
                     st.error(f"Ошибка обработки страниц OCR: {e}")
                     # DEBUG: filter error
                     print(f"[DEBUG] Error in filter_textract_response: {e}")
@@ -255,7 +255,7 @@ if submitted:
                 with open(filtered_textract_response_path, "r", encoding="utf-8") as f:
                     pages_obj = json.load(f)
                 try:
-                    status.update(label="Страницы OCR обработаны", state="complete")
+                    status.update(label="Textract: Фильтрация успешно завершена", state="complete")
                 except Exception:
                     pass
             # DEBUG: pages stats
@@ -278,10 +278,10 @@ if submitted:
             # Doc type checker step (before GPT)
             # DEBUG: starting doc type checker
             print("[DEBUG] Starting doc type checker with pages_obj")
-            with st.status("Проверка типа документа...", state="running") as status:
+            with st.status("GPT: Проверка на тип документа...", state="running") as status:
                 dtc_step = run_doc_type_checker(pages_obj, gpt_dir)
                 if not dtc_step.get("success"):
-                    status.update(label=f"Ошибка проверки типа документа: {dtc_step.get('error')}", state="error")
+                    status.update(label=f"GPT: Ошибка проверки на тип документа: {dtc_step.get('error')}", state="error")
                     st.error(f"Ошибка проверки типа документа: {dtc_step.get('error')}")
                     # DEBUG: doc type checker error
                     print(f"[DEBUG] Doc type checker error: {dtc_step.get('error')}")
@@ -294,12 +294,12 @@ if submitted:
                         # DEBUG: doc type filter success
                         print(f"[DEBUG] Doc type filter success. filtered_path={dtc_filtered_path}")
                         try:
-                            status.update(label="Тип документа определен", state="complete")
+                            status.update(label="GPT: Проверка на тип документа успешно завершена", state="complete")
                         except Exception:
                             pass
                     except Exception as e:
                         print(f"[DEBUG] Doc type filter failed: {e}")
-                        status.update(label=f"Ошибка фильтра doc_type_check: {e}", state="error")
+                        status.update(label=f"GPT: Ошибка фильтра doc_type_check: {e}", state="error")
                         st.error(f"Ошибка фильтра doc_type_check: {e}")
                         st.stop()
 
@@ -307,10 +307,10 @@ if submitted:
             if isinstance(pages_obj.get("pages"), list) and len(pages_obj["pages"]) > 0:
                 # DEBUG: starting GPT extractor
                 print("[DEBUG] Starting GPT extractor with pages_obj")
-                with st.status("GPT извлечение данных...", state="running") as status_gpt:
+                with st.status("GPT: Извлечение нужных значений...", state="running") as status:
                     gpt_step = run_gpt_extractor(pages_obj, gpt_dir)
                     if not gpt_step.get("success"):
-                        status_gpt.update(label=f"Ошибка GPT: {gpt_step.get('error')}", state="error")
+                        status.update(label=f"GPT: Ошибка извлечения: {gpt_step.get('error')}", state="error")
                         st.error(f"Ошибка GPT: {gpt_step.get('error')}")
                         # DEBUG: gpt extractor error
                         print(f"[DEBUG] GPT extractor error: {gpt_step.get('error')}")
@@ -321,11 +321,11 @@ if submitted:
                         # DEBUG: gpt filter success
                         print(f"[DEBUG] GPT filter success. filtered_path={fp}")
                         try:
-                            status_gpt.update(label="GPT извлечение завершено", state="complete")
+                            status.update(label="GPT: Извлечение нужных значений успешно завершено", state="complete")
                         except Exception:
                             pass
                     else:
-                        status_gpt.update(label=f"Ошибка фильтрации GPT: {filter_step.get('error')}", state="error")
+                        status.update(label=f"GPT: Ошибка фильтрации: {filter_step.get('error')}", state="error")
                         st.error(f"Ошибка фильтрации GPT: {filter_step.get('error')}")
                         st.stop()
                         # DEBUG: gpt filter failure
