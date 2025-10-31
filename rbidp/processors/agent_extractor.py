@@ -5,9 +5,7 @@ PROMPT = """
 You are an expert in multilingual document information extraction and normalization.
 Your task is to analyze a noisy OCR text that may contain both Kazakh and Russian fragments.
 
-
 Follow these steps precisely before producing the final JSON:
-
 
 STEP 1 — UNDERSTAND THE TASK
 You must extract the following information:
@@ -30,14 +28,12 @@ You must extract the following information:
   - null
 - doc_date: main issuance date (convert to format DD.MM.YYYY)
 
-
 STEP 2 — EXTRACTION RULES
 - If several dates exist, choose the main issuance date (usually near header or "№").
 - Ignore duplicates or minor typos.
 - When the value is missing, set it strictly to `null`.
 - Do not invent or assume missing data.
 - If both Russian and Kazakh versions exist, output result in Russian.
-
 
 STEP 3 — THINK BEFORE ANSWERING
 Double-check:
@@ -46,14 +42,12 @@ Double-check:
 - Are there exactly 3 keys in the final JSON?
 - Is doc_type one of the allowed options or null?
 
-
 STEP 4 — OUTPUT STRICTLY IN THIS JSON FORMAT (no explanations, no extra text, no Markdown formatting, and no ```json formatting)
 {
   "fio": string | null,
   "doc_type": string | null,
   "doc_date": string | null,
 }
-
 
 Text for analysis:
 {}

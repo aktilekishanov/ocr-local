@@ -3,10 +3,7 @@ from datetime import datetime, timedelta, timezone
 import os
 from typing import Dict, Any
 import re
-try:
-    from rapidfuzz import fuzz  # type: ignore
-except Exception:
-    fuzz = None  # fuzzy matching optional; fallback to exact match
+from rapidfuzz import fuzz  
 from rbidp.core.config import VALIDATION_FILENAME
 
 VALIDATION_MESSAGES = {
@@ -92,26 +89,26 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
 
     fio_meta_ru = kz_to_ru(fio_meta)
 
-    # for debugging (delete later)
-    score_after = fuzz.token_sort_ratio(fio_meta_ru, fio)
-    score_before = fuzz.token_sort_ratio(fio_meta, fio)
-    print(f"FIO score after kz_to_ru: {score_after}\n")
-    print(f"FIO score before kz_to_ru: {score_before}\n")
-
     fio = _norm_text(merged.get("fio")) if isinstance(merged, dict) else ""
     doc_class = _norm_text(merged.get("doc_type")) if isinstance(merged, dict) else ""
     doc_date_raw = merged.get("doc_date") if isinstance(merged, dict) else None
     single_doc_type = merged.get("single_doc_type") if isinstance(merged, dict) else None
 
+    # for debugging (delete later)
+    score_before = fuzz.token_sort_ratio(fio_meta, fio)
+    print(f"\nfio_meta: {fio_meta} vs fio: {fio}")
+    print(f"FIO score before kz_to_ru: {score_before}\n")
+
+    score_after = fuzz.token_sort_ratio(fio_meta_ru, fio)
+    print(f"fio_meta_ru: {fio_meta_ru} vs fio: {fio}")
+    print(f"FIO score after kz_to_ru: {score_after}\n")
+
     # Fuzzy FIO match (token-sort) with threshold 90; fallback to exact match if rapidfuzz not available
     if fio_meta and fio:
-        if fuzz is not None:
-            try:
-                score = fuzz.token_sort_ratio(fio_meta_ru, fio)
-                fio_match = score >= 90
-            except Exception:
-                fio_match = fio_meta_ru == fio
-        else:
+        try:
+            score = fuzz.token_sort_ratio(fio_meta_ru, fio)
+            fio_match = score >= 90
+        except Exception:
             fio_match = fio_meta_ru == fio
     else:
         fio_match = False

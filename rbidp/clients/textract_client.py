@@ -9,7 +9,7 @@ def call_fortebank_textract(pdf_path: str, ocr_engine: str = "textract") -> str:
     """
     Sends a PDF to ForteBank Textract OCR endpoint and returns the raw response.
     """
-    url = "http://dev-ocr.fortebank.com/v1/pdf"
+    url = "https://dev-ocr.fortebank.com/v1/pdf"
  
     # Read file bytes
     with open(pdf_path, "rb") as f:
