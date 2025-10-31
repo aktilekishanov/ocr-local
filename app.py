@@ -357,63 +357,14 @@ if submitted:
                             val_result = validation.get("result", {})
                             validation_path = validation.get("validation_path", "")
                             st.subheader("Результат проверки")
-                                                        # Standalone diagnostics (do not alter existing badge/checks area; replace JSON dump)
-                            checks = val_result.get("checks", {}) or {}
-                            diag = val_result.get("diagnostics", {}) or {}
-                            inputs = diag.get("inputs", {}) or {}
-                            timing = diag.get("timing", {}) or {}
-
-                            fio_meta_disp = inputs.get("fio_meta")
-                            fio_doc_disp = inputs.get("fio")
-                            dt_meta_disp = inputs.get("doc_type_meta")
-                            dt_doc_disp = inputs.get("doc_type")
-                            doc_date_disp = inputs.get("doc_date")
-                            run_iso = timing.get("now_utc_plus_5")
-                            run_date_disp = None
-                            try:
-                                if isinstance(run_iso, str) and run_iso:
-                                    run_dt = datetime.fromisoformat(run_iso)
-                                    run_date_disp = run_dt.strftime("%d.%m.%Y")
-                            except Exception:
-                                run_date_disp = run_iso
-
-                            fio_ok = checks.get("fio_match") is True
-                            dt_ok = checks.get("doc_type_match") is True
-                            date_ok = checks.get("doc_date_valid") is True
-                            single_ok = checks.get("single_doc_type_valid") is True
-
-                            st.markdown(
-                                f"""
-                                <div class=\"card pad\" style=\"margin-top:8px;\">
-                                  <div style=\"font-size:1rem;font-weight:800;margin-bottom:10px;\">Диагностика</div>
-                                  <div class=\"result-card\" style=\"background:#fff;\">
-                                    <div style=\"margin-bottom:14px;\">
-                                      <div style=\"font-weight:700;margin-bottom:6px;\">Проверка на соответствие ФИО</div>
-                                      <div>ФИО в заявке: {fio_meta_disp or '—'} | ФИО в документе: {fio_doc_disp or '—'}</div>
-                                      <div style=\"margin-top:4px;color:{('#065F46' if fio_ok else '#991B1B')};font-weight:600;\">{('Успешно: Документ относится к заявителю' if fio_ok else 'Ошибка: Не относится к заявителю') if checks.get('fio_match') is not None else 'Нет данных для проверки'}</div>
-                                    </div>
-                                    <hr style=\"border:none;border-top:1px solid #e5e7eb;margin:10px 0;\" />
-                                    <div style=\"margin:10px 0;\">
-                                      <div style=\"font-weight:700;margin-bottom:6px;\">Проверка на соответствие типа документа</div>
-                                      <div>Тип в заявке: {dt_meta_disp or '—'} | Тип в документе: {dt_doc_disp or '—'}</div>
-                                      <div style=\"margin-top:4px;color:{('#065F46' if dt_ok else '#991B1B')};font-weight:600;\">{('Успешно: Тип документа соответствует заявке' if dt_ok else 'Ошибка: Неверный формат документа') if checks.get('doc_type_match') is not None else 'Нет данных для проверки'}</div>
-                                    </div>
-                                    <hr style=\"border:none;border-top:1px solid #e5e7eb;margin:10px 0;\" />
-                                    <div style=\"margin:10px 0;\">
-                                      <div style=\"font-weight:700;margin-bottom:6px;\">Проверка на актуальность даты документа</div>
-                                      <div>Дата документа: {doc_date_disp or '—'} | Дата заявки: {run_date_disp or '—'}</div>
-                                      <div style=\"margin-top:4px;color:{('#065F46' if date_ok else '#991B1B')};font-weight:600;\">{('Успешно: Актуальная дата документа' if date_ok else 'Ошибка: Устаревшая дата документа') if checks.get('doc_date_valid') is not None else 'Нет данных для проверки'}</div>
-                                    </div>
-                                    <hr style=\"border:none;border-top:1px solid #e5e7eb;margin:10px 0;\" />
-                                    <div style=\"margin:10px 0;\">
-                                      <div style=\"font-weight:700;margin-bottom:6px;\">Проверка на количество типов документа внутри файла</div>
-                                      <div style=\"margin-top:4px;color:{('#065F46' if single_ok else '#991B1B')};font-weight:600;\">{('Успешно: Файл содержит один тип документа' if single_ok else 'Ошибка: Файл содержит несколько типов документов') if checks.get('single_doc_type_valid') is not None else 'Нет данных для проверки'}</div>
-                                    </div>
-                                  </div>
-                                </div>
-                                """,
-                                unsafe_allow_html=True,
-                            )
+                            st.json(val_result)
+                            with open(merged_path, "rb") as mb:
+                                st.download_button(
+                                    label="Скачать JSON (итог)",
+                                    data=mb.read(),
+                                    file_name=MERGED_FILENAME,
+                                    mime="application/json",
+                                )
                             print(f"[DEBUG] Validation written to: {validation_path}")
                             try:
                                 status_merge.update(label="Валидация успешно завершена", state="complete")
