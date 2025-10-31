@@ -357,8 +357,7 @@ if submitted:
                             val_result = validation.get("result", {})
                             validation_path = validation.get("validation_path", "")
                             st.subheader("Результат проверки")
-
-                            # Standalone diagnostics (do not alter existing badge/checks area; replace JSON dump)
+                                                        # Standalone diagnostics (do not alter existing badge/checks area; replace JSON dump)
                             checks = val_result.get("checks", {}) or {}
                             diag = val_result.get("diagnostics", {}) or {}
                             inputs = diag.get("inputs", {}) or {}
@@ -415,13 +414,6 @@ if submitted:
                                 """,
                                 unsafe_allow_html=True,
                             )
-                            with open(merged_path, "rb") as mb:
-                                st.download_button(
-                                    label="Скачать JSON (итог)",
-                                    data=mb.read(),
-                                    file_name=MERGED_FILENAME,
-                                    mime="application/json",
-                                )
                             print(f"[DEBUG] Validation written to: {validation_path}")
                             try:
                                 status_merge.update(label="Валидация успешно завершена", state="complete")
