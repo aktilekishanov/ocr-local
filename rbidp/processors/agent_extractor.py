@@ -36,6 +36,9 @@ STEP 2 — EXTRACTION RULES
 - If both Russian and Kazakh versions exist, output result in Russian.
 - Always include surname, given name, and patronymic (if available).
 - If the name appears in oblique case (e.g. Ивановой Марине Олеговне), convert it to nominative form (e.g. Иванова Марина Олеговна).
+- If the text contains both a full and abbreviated form (e.g. "Аметовой М.М." and "Аметовой Мереке Маратовне"),
+  **always select the full explicit version**.
+
 
 STEP 3 — THINK BEFORE ANSWERING
 Double-check:
