@@ -136,26 +136,31 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
     print(f"fio_meta_norm: {fio_meta_norm} vs fio_norm: {fio_norm}")
     print(f"FIO score after normalization: {score_after}\n")
 
-    # Fuzzy FIO match (token-sort) with threshold 90; fallback to exact match if rapidfuzz not available
-    if fio_meta and fio:
+    if fio_meta_norm and fio_norm:
         try:
             score = fuzz.token_sort_ratio(fio_meta_norm, fio_norm)
             fio_match = score >= 90
         except Exception:
             fio_match = fio_meta_norm == fio_norm
     else:
-        fio_match = False
-    doc_type_match = bool(doc_type_meta and doc_class and doc_type_meta == doc_class)
+        fio_match = None
+    if doc_type_meta and doc_class:
+        doc_type_match = doc_type_meta == doc_class
+    else:
+        doc_type_match = None
 
     d = _parse_doc_date(doc_date_raw)
     now = _now_utc_plus_5()
-    doc_date_valid = False
-    if d is not None:
-        # assume doc date is local date at 00:00; compare inclusive 30 days window
+    if d is None:
+        doc_date_valid = None
+    else:
         d_local = d.replace(tzinfo=timezone(timedelta(hours=5)))
         doc_date_valid = now <= (d_local + timedelta(days=30))
 
-    single_doc_type_valid = bool(isinstance(single_doc_type, bool) and single_doc_type is True)
+    if isinstance(single_doc_type, bool):
+        single_doc_type_valid = single_doc_type
+    else:
+        single_doc_type_valid = None
 
     checks = {
         "fio_match": fio_match,
