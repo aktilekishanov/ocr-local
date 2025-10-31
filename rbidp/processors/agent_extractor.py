@@ -35,6 +35,7 @@ STEP 2 — EXTRACTION RULES
 - Do not invent or assume missing data.
 - If both Russian and Kazakh versions exist, output result in Russian.
 - Always include surname, given name, and patronymic (if available).
+- If the name appears in oblique case (e.g. Ивановой Марине Олеговне), convert it to nominative form (e.g. Иванова Марина Олеговна).
 
 STEP 3 — THINK BEFORE ANSWERING
 Double-check:
