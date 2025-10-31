@@ -115,26 +115,32 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
         return {"success": False, "error": f"IO error: {e}", "validation_path": "", "result": None}
 
 
-    fio_meta = _norm_text(meta.get("fio")) if isinstance(meta, dict) else ""
-    doc_type_meta = _norm_text(meta.get("doc_type")) if isinstance(meta, dict) else ""
+    fio_meta_raw = meta.get("fio") if isinstance(meta, dict) else None
+    doc_type_meta_raw = meta.get("doc_type") if isinstance(meta, dict) else None
+
+    fio_meta = _norm_text(fio_meta_raw)
+    doc_type_meta = _norm_text(doc_type_meta_raw)
 
     fio_meta_ru = kz_to_ru(fio_meta)
     fio_meta_norm = latin_to_cyrillic(fio_meta_ru)
 
-    fio = _norm_text(merged.get("fio")) if isinstance(merged, dict) else ""
+    fio_raw = merged.get("fio") if isinstance(merged, dict) else None
+    fio = _norm_text(fio_raw)
     fio_norm = latin_to_cyrillic(fio)
-    doc_class = _norm_text(merged.get("doc_type")) if isinstance(merged, dict) else ""
+    doc_class_raw = merged.get("doc_type") if isinstance(merged, dict) else None
+    doc_class = _norm_text(doc_class_raw)
     doc_date_raw = merged.get("doc_date") if isinstance(merged, dict) else None
-    single_doc_type = merged.get("single_doc_type") if isinstance(merged, dict) else None
+    single_doc_type_raw = merged.get("single_doc_type") if isinstance(merged, dict) else None
 
-    # for debugging (delete later)
-    score_before = fuzz.token_sort_ratio(fio_meta, fio)
-    print(f"\nfio_meta: {fio_meta} vs fio: {fio}")
-    print(f"FIO score before kz_to_ru: {score_before}\n")
-
-    score_after = fuzz.token_sort_ratio(fio_meta_norm, fio_norm)
-    print(f"fio_meta_norm: {fio_meta_norm} vs fio_norm: {fio_norm}")
-    print(f"FIO score after normalization: {score_after}\n")
+    score_before = None
+    score_after = None
+    try:
+        if fio_meta and fio:
+            score_before = fuzz.token_sort_ratio(fio_meta, fio)
+        if fio_meta_norm and fio_norm:
+            score_after = fuzz.token_sort_ratio(fio_meta_norm, fio_norm)
+    except Exception:
+        pass
 
     if fio_meta_norm and fio_norm:
         try:
@@ -157,8 +163,8 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
         d_local = d.replace(tzinfo=timezone(timedelta(hours=5)))
         doc_date_valid = now <= (d_local + timedelta(days=30))
 
-    if isinstance(single_doc_type, bool):
-        single_doc_type_valid = single_doc_type
+    if isinstance(single_doc_type_raw, bool):
+        single_doc_type_valid = single_doc_type_raw
     else:
         single_doc_type_valid = None
 
@@ -171,10 +177,41 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
 
     verdict = all(checks.values())
 
-    # Minimal result payload
+    diagnostics = {
+        "inputs": {
+            "fio_meta": fio_meta_raw,
+            "fio": fio_raw,
+            "doc_type_meta": doc_type_meta_raw,
+            "doc_type": doc_class_raw,
+            "doc_date": doc_date_raw,
+            "single_doc_type": single_doc_type_raw,
+        },
+        "normalization": {
+            "fio_meta_norm": fio_meta_norm,
+            "fio_norm": fio_norm,
+            "doc_type_meta_norm": doc_type_meta,
+            "doc_type_norm": doc_class,
+        },
+        "scores": {
+            "fio_similarity_before": score_before,
+            "fio_similarity_after": score_after,
+        },
+        "timing": {
+            "now_utc_plus_5": now.isoformat(),
+            "doc_date_parsed": d.isoformat() if d else None,
+            "validity_window_days": 30,
+        },
+        "checks": checks,
+        "messages": {
+            key: VALIDATION_MESSAGES["checks"][key].get(val) if val is not None else None
+            for key, val in checks.items()
+        },
+    }
+
     result = {
         "checks": checks,
         "verdict": verdict,
+        "diagnostics": diagnostics,
     }
 
     try:
