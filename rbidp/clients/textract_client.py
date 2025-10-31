@@ -4,6 +4,8 @@ import mimetypes
 import os
 import uuid
 import json
+from typing import Optional
+from rbidp.processors.image_to_pdf_converter import convert_image_to_pdf
  
 def call_fortebank_textract(pdf_path: str, ocr_engine: str = "textract") -> str:
     """
@@ -21,6 +23,8 @@ def call_fortebank_textract(pdf_path: str, ocr_engine: str = "textract") -> str:
  
     filename = os.path.basename(pdf_path)
     mime_type = mimetypes.guess_type(filename)[0] or "application/pdf"
+    if not mime_type or not mime_type.endswith("pdf"):
+        mime_type = "application/pdf"
  
     # Construct the multipart body
     body = (
@@ -48,7 +52,16 @@ def call_fortebank_textract(pdf_path: str, ocr_engine: str = "textract") -> str:
     return result
 
 def ask_textract(pdf_path: str, output_dir: str = "output", save_json: bool = True) -> dict:
-    raw = call_fortebank_textract(pdf_path)
+    work_path = pdf_path
+    temp_pdf: Optional[str] = None
+    mt, _ = mimetypes.guess_type(pdf_path)
+    is_pdf = bool(mt == "application/pdf" or pdf_path.lower().endswith(".pdf"))
+    is_image = bool((mt and mt.startswith("image/")) or os.path.splitext(pdf_path)[1].lower() in {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".heic", ".heif"})
+    if not is_pdf and is_image:
+        os.makedirs(output_dir, exist_ok=True)
+        temp_pdf = convert_image_to_pdf(pdf_path, output_dir=output_dir)
+        work_path = temp_pdf
+    raw = call_fortebank_textract(work_path)
     os.makedirs(output_dir, exist_ok=True)
     raw_path = os.path.join(output_dir, "textract_response_raw.json")
     if save_json:
@@ -67,9 +80,15 @@ def ask_textract(pdf_path: str, output_dir: str = "output", save_json: bool = Tr
     error = None
     if not success:
         error = (obj.get("message") or obj.get("error") or parse_err or "Unknown OCR error") if isinstance(obj, dict) else (parse_err or "Unknown OCR error")
-    return {
+    result = {
         "success": success,
         "error": error,
         "raw_path": raw_path,
         "raw_obj": obj if isinstance(obj, dict) else {},
     }
+    if temp_pdf and os.path.isfile(temp_pdf):
+        try:
+            os.remove(temp_pdf)
+        except Exception:
+            pass
+    return result
