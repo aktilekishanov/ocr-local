@@ -53,14 +53,16 @@ def call_fortebank_textract(pdf_path: str, ocr_engine: str = "textract") -> str:
 
 def ask_textract(pdf_path: str, output_dir: str = "output", save_json: bool = True) -> dict:
     work_path = pdf_path
-    temp_pdf: Optional[str] = None
+    converted_pdf: Optional[str] = None
     mt, _ = mimetypes.guess_type(pdf_path)
     is_pdf = bool(mt == "application/pdf" or pdf_path.lower().endswith(".pdf"))
     is_image = bool((mt and mt.startswith("image/")) or os.path.splitext(pdf_path)[1].lower() in {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".heic", ".heif"})
     if not is_pdf and is_image:
-        os.makedirs(output_dir, exist_ok=True)
-        temp_pdf = convert_image_to_pdf(pdf_path, output_dir=output_dir)
-        work_path = temp_pdf
+        base_dir = os.path.dirname(pdf_path)
+        base_name = os.path.splitext(os.path.basename(pdf_path))[0]
+        desired_path = os.path.join(base_dir, f"{base_name}_converted.pdf")
+        converted_pdf = convert_image_to_pdf(pdf_path, output_path=desired_path)
+        work_path = converted_pdf
     raw = call_fortebank_textract(work_path)
     os.makedirs(output_dir, exist_ok=True)
     raw_path = os.path.join(output_dir, "textract_response_raw.json")
@@ -85,10 +87,6 @@ def ask_textract(pdf_path: str, output_dir: str = "output", save_json: bool = Tr
         "error": error,
         "raw_path": raw_path,
         "raw_obj": obj if isinstance(obj, dict) else {},
+        "converted_pdf": converted_pdf
     }
-    if temp_pdf and os.path.isfile(temp_pdf):
-        try:
-            os.remove(temp_pdf)
-        except Exception:
-            pass
     return result
