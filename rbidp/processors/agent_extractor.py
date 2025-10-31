@@ -34,6 +34,7 @@ STEP 2 — EXTRACTION RULES
 - When the value is missing, set it strictly to `null`.
 - Do not invent or assume missing data.
 - If both Russian and Kazakh versions exist, output result in Russian.
+- Always include surname, given name, and patronymic (if available).
 
 STEP 3 — THINK BEFORE ANSWERING
 Double-check:
