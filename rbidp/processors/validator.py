@@ -74,6 +74,37 @@ def kz_to_ru(s: str) -> str:
     })
     return s.translate(table)
 
+def latin_to_cyrillic(s: str) -> str:
+    table = str.maketrans({
+        "a": "а",
+        "e": "е",
+        "o": "о",
+        "p": "р",
+        "c": "с",
+        "y": "у",
+        "x": "х",
+        "k": "к",
+        "h": "н",
+        "b": "в",
+        "m": "м",
+        "t": "т",
+        "i": "и",
+        "A": "А",
+        "E": "Е",
+        "O": "О",
+        "P": "Р",
+        "C": "С",
+        "Y": "У",
+        "X": "Х",
+        "K": "К",
+        "H": "Н",
+        "B": "В",
+        "M": "М",
+        "T": "Т",
+        "I": "И",
+    })
+    return s.translate(table)
+
 def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: str = VALIDATION_FILENAME) -> Dict[str, Any]:
     try:
         with open(meta_path, "r", encoding="utf-8") as mf:
@@ -88,8 +119,10 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
     doc_type_meta = _norm_text(meta.get("doc_type")) if isinstance(meta, dict) else ""
 
     fio_meta_ru = kz_to_ru(fio_meta)
+    fio_meta_norm = latin_to_cyrillic(fio_meta_ru)
 
     fio = _norm_text(merged.get("fio")) if isinstance(merged, dict) else ""
+    fio_norm = latin_to_cyrillic(fio)
     doc_class = _norm_text(merged.get("doc_type")) if isinstance(merged, dict) else ""
     doc_date_raw = merged.get("doc_date") if isinstance(merged, dict) else None
     single_doc_type = merged.get("single_doc_type") if isinstance(merged, dict) else None
@@ -99,17 +132,17 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
     print(f"\nfio_meta: {fio_meta} vs fio: {fio}")
     print(f"FIO score before kz_to_ru: {score_before}\n")
 
-    score_after = fuzz.token_sort_ratio(fio_meta_ru, fio)
-    print(f"fio_meta_ru: {fio_meta_ru} vs fio: {fio}")
-    print(f"FIO score after kz_to_ru: {score_after}\n")
+    score_after = fuzz.token_sort_ratio(fio_meta_norm, fio_norm)
+    print(f"fio_meta_norm: {fio_meta_norm} vs fio_norm: {fio_norm}")
+    print(f"FIO score after normalization: {score_after}\n")
 
     # Fuzzy FIO match (token-sort) with threshold 90; fallback to exact match if rapidfuzz not available
     if fio_meta and fio:
         try:
-            score = fuzz.token_sort_ratio(fio_meta_ru, fio)
+            score = fuzz.token_sort_ratio(fio_meta_norm, fio_norm)
             fio_match = score >= 90
         except Exception:
-            fio_match = fio_meta_ru == fio
+            fio_match = fio_meta_norm == fio_norm
     else:
         fio_match = False
     doc_type_match = bool(doc_type_meta and doc_class and doc_type_meta == doc_class)
