@@ -113,7 +113,8 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
 
     fio_raw = merged.get("fio") if isinstance(merged, dict) else None
     fio = _norm_text(fio_raw)
-    fio_norm = latin_to_cyrillic(fio)
+    fio_ru = kz_to_ru(fio)
+    fio_norm = latin_to_cyrillic(fio_ru)
     doc_class_raw = merged.get("doc_type") if isinstance(merged, dict) else None
     doc_class = _norm_text(doc_class_raw)
     doc_date_raw = merged.get("doc_date") if isinstance(merged, dict) else None
