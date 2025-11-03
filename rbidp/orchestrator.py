@@ -168,6 +168,7 @@ def run_pipeline(
     runs_root: Path,
 ) -> Dict[str, Any]:
     run_id = _now_id()
+    request_created_at = datetime.now(timezone(timedelta(hours=UTC_OFFSET_HOURS))).isoformat()
     dirs = _mk_run_dirs(runs_root, run_id)
     base_dir, input_dir, ocr_dir, gpt_dir, meta_dir = (
         dirs["base"], dirs["input"], dirs["ocr"], dirs["gpt"], dirs["meta"]
@@ -469,6 +470,7 @@ def run_pipeline(
             single_doc_type_raw = merged_obj.get("single_doc_type") if isinstance(merged_obj, dict) else None
 
             side_by_side = {
+                "request_created_at": request_created_at,
                 "fio": {
                     "meta": fio_meta_raw,
                     "extracted": fio_extracted_raw,

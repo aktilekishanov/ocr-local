@@ -187,11 +187,12 @@ if submitted:
                         rows = []
                         try:
                             rows = [
-                                {"Поле": "ФИО (meta)", "Значение": side_by_side.get("fio", {}).get("meta")},
-                                {"Поле": "ФИО (extracted)", "Значение": side_by_side.get("fio", {}).get("extracted")},
-                                {"Поле": "Тип документа (meta)", "Значение": side_by_side.get("doc_type", {}).get("meta")},
-                                {"Поле": "Тип документа (extracted)", "Значение": side_by_side.get("doc_type", {}).get("extracted")},
-                                {"Поле": "Дата документа (extracted)", "Значение": side_by_side.get("doc_date", {}).get("extracted")},
+                                {"Поле": "ФИО (заявка)", "Значение": side_by_side.get("fio", {}).get("meta")},
+                                {"Поле": "ФИО (из документа)", "Значение": side_by_side.get("fio", {}).get("extracted")},
+                                {"Поле": "Тип документа (заявка)", "Значение": side_by_side.get("doc_type", {}).get("meta")},
+                                {"Поле": "Тип документа (из документа)", "Значение": side_by_side.get("doc_type", {}).get("extracted")},
+                                {"Поле": "Время заявки (UTC+5)", "Значение": side_by_side.get("request_created_at")},
+                                {"Поле": "Дата документа (из документа)", "Значение": side_by_side.get("doc_date", {}).get("extracted")},
                                 {"Поле": "Действителен до", "Значение": side_by_side.get("doc_date", {}).get("valid_until")},
                                 {"Поле": "Один тип документа", "Значение": side_by_side.get("single_doc_type", {}).get("extracted")},
                             ]
