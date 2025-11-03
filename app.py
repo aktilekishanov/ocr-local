@@ -246,41 +246,13 @@ if submitted:
                 else:
                     st.write(f"- {msg}")
 
-        # Download buttons
+        # Diagnostics: show final_result.json for full context
         final_result_path = artifacts.get("final_result_path")
         if isinstance(final_result_path, str) and os.path.exists(final_result_path):
-            with open(final_result_path, "rb") as fb:
-                st.download_button(
-                    label="Скачать итог (final_result.json)",
-                    data=fb.read(),
-                    file_name="final_result.json",
-                    mime="application/json",
-                )
-
-        merged_path = artifacts.get("gpt_merged_path")
-        if isinstance(merged_path, str) and os.path.exists(merged_path):
-            with open(merged_path, "rb") as mb:
-                st.download_button(
-                    label="Скачать JSON (итог, merged.json)",
-                    data=mb.read(),
-                    file_name=MERGED_FILENAME,
-                    mime="application/json",
-                )
-
-        validation_path = artifacts.get("validation_path")
-        if isinstance(validation_path, str) and os.path.exists(validation_path):
-            with open(validation_path, "rb") as vb:
-                st.download_button(
-                    label="Скачать JSON (validation.json)",
-                    data=vb.read(),
-                    file_name=VALIDATION_FILENAME,
-                    mime="application/json",
-                )
-            # Diagnostics view
             try:
-                with open(validation_path, "r", encoding="utf-8") as vf:
-                    val_obj = json.load(vf)
-                with st.expander("Диагностика (подробно)"):
-                    st.json(val_obj)
+                with open(final_result_path, "r", encoding="utf-8") as ff:
+                    final_obj = json.load(ff)
+                with st.expander("Диагностика: final_results.json"):
+                    st.json(final_obj)
             except Exception:
                 pass
