@@ -2,10 +2,9 @@ import json
 from datetime import datetime, timedelta
 import os
 from typing import Dict, Any
-import re
-from rapidfuzz import fuzz  
 from rbidp.core.config import VALIDATION_FILENAME
 from rbidp.core.dates import parse_doc_date, now_utc_plus
+from rbidp.core.text_norm import fold_ws_case, safe_fuzz_ratio, normalize_fio
 
 VALIDATION_MESSAGES = {
     "checks": {
@@ -33,64 +32,8 @@ VALIDATION_MESSAGES = {
 }
 
 
-def _norm_text(s: Any) -> str:
-    if not isinstance(s, str):
-        return ""
-    # collapse whitespace and lowercase
-    s = re.sub(r"\s+", " ", s.strip())
-    return s.casefold()
-
-
 def _now_utc_plus_5():
     return now_utc_plus(5)
-
-def kz_to_ru(s: str) -> str:
-    table = str.maketrans({
-        "қ": "к",
-        "ұ": "у",
-        "ү": "у", 
-        "ң": "н",
-        "ғ": "г",
-        "ө": "о",
-        "Қ": "К",
-        "Ұ": "У",
-        "Ү": "У",
-        "Ң": "Н",
-        "Ғ": "Г",
-        "Ө": "О",
-    })
-    return s.translate(table)
-
-def latin_to_cyrillic(s: str) -> str:
-    table = str.maketrans({
-        "a": "а",
-        "e": "е",
-        "o": "о",
-        "p": "р",
-        "c": "с",
-        "y": "у",
-        "x": "х",
-        "k": "к",
-        "h": "н",
-        "b": "в",
-        "m": "м",
-        "t": "т",
-        "i": "и",
-        "A": "А",
-        "E": "Е",
-        "O": "О",
-        "P": "Р",
-        "C": "С",
-        "Y": "У",
-        "X": "Х",
-        "K": "К",
-        "H": "Н",
-        "B": "В",
-        "M": "М",
-        "T": "Т",
-        "I": "И",
-    })
-    return s.translate(table)
 
 def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: str = VALIDATION_FILENAME, write_file: bool = True) -> Dict[str, Any]:
     try:
@@ -102,38 +45,34 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
         return {"success": False, "error": f"IO error: {e}", "validation_path": "", "result": None}
 
 
+    # Inputs (raw)
     fio_meta_raw = meta.get("fio") if isinstance(meta, dict) else None
     doc_type_meta_raw = meta.get("doc_type") if isinstance(meta, dict) else None
-
-    fio_meta = _norm_text(fio_meta_raw)
-    doc_type_meta = _norm_text(doc_type_meta_raw)
-
-    fio_meta_ru = kz_to_ru(fio_meta)
-    fio_meta_norm = latin_to_cyrillic(fio_meta_ru)
-
     fio_raw = merged.get("fio") if isinstance(merged, dict) else None
-    fio = _norm_text(fio_raw)
-    fio_norm = latin_to_cyrillic(fio)
-    doc_class_raw = merged.get("doc_type") if isinstance(merged, dict) else None
-    doc_class = _norm_text(doc_class_raw)
+    doc_class = merged.get("doc_type") if isinstance(merged, dict) else None
     doc_date_raw = merged.get("doc_date") if isinstance(merged, dict) else None
     single_doc_type_raw = merged.get("single_doc_type") if isinstance(merged, dict) else None
 
-    score_before = None
-    score_after = None
-    try:
-        if fio_meta and fio:
-            score_before = fuzz.token_sort_ratio(fio_meta, fio)
-        if fio_meta_norm and fio_norm:
-            score_after = fuzz.token_sort_ratio(fio_meta_norm, fio_norm)
-    except Exception:
-        pass
+    # Normalization (FIO)
+    fio_meta_norm = normalize_fio(fio_meta_raw)
+    fio_norm = normalize_fio(fio_raw)
+
+    # Doc type (meta folded for safety, extracted kept raw)
+    doc_type_meta = fold_ws_case(doc_type_meta_raw)
+
+    # Similarity scores (pre/post normalization)
+    score_before = (
+        safe_fuzz_ratio(fold_ws_case(fio_meta_raw), fold_ws_case(fio_raw))
+        if (fio_meta_raw and fio_raw)
+        else None
+    )
+    score_after = safe_fuzz_ratio(fio_meta_norm, fio_norm) if (fio_meta_norm and fio_norm) else None
 
     if fio_meta_norm and fio_norm:
-        try:
-            score = fuzz.token_sort_ratio(fio_meta_norm, fio_norm)
+        score = safe_fuzz_ratio(fio_meta_norm, fio_norm)
+        if score is not None:
             fio_match = score >= 90
-        except Exception:
+        else:
             fio_match = fio_meta_norm == fio_norm
     else:
         fio_match = None

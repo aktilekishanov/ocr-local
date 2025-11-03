@@ -386,10 +386,10 @@ def run_pipeline(
         with open(gpt_raw_path, "w", encoding="utf-8") as f:
             f.write(gpt_raw or "")
         filtered_path = filter_gpt_generic_response(str(gpt_raw_path), str(gpt_dir), filename=GPT_EXTRACTOR_FILTERED)
-        try:
-            os.remove(gpt_raw_path)
-        except Exception as e:
-            logger.debug("Failed to remove gpt_raw_path: %s", e, exc_info=True)
+        # try:
+        #     os.remove(gpt_raw_path)
+        # except Exception as e:
+        #     logger.debug("Failed to remove gpt_raw_path: %s", e, exc_info=True)
         artifacts["gpt_extractor_filtered_path"] = str(filtered_path)
         with open(filtered_path, "r", encoding="utf-8") as f:
             filtered_obj = json.load(f)
