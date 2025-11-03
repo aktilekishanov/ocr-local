@@ -228,7 +228,6 @@ if submitted:
         st.subheader("Результат проверки")
         verdict = bool(result.get("verdict", False))
         errors = result.get("errors", []) or []
-        artifacts = result.get("artifacts", {}) or {}
 
         if verdict:
             st.success("Вердикт: True — документ прошел проверку")
@@ -247,7 +246,7 @@ if submitted:
                     st.write(f"- {msg}")
 
         # Diagnostics: show final_result.json for full context
-        final_result_path = artifacts.get("final_result_path")
+        final_result_path = result.get("final_result_path")
         if isinstance(final_result_path, str) and os.path.exists(final_result_path):
             try:
                 with open(final_result_path, "r", encoding="utf-8") as ff:
