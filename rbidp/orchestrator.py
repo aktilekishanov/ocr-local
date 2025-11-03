@@ -520,15 +520,21 @@ def run_pipeline(
 
     # Validation
     try:
+        meta_path_s = str(meta_dir / METADATA_FILENAME)
+        merged_path_s = str(merged_path)
+        logger.debug("Validation inputs: meta_path=%s (exists=%s), merged_path=%s (exists=%s)",
+                     meta_path_s, (meta_dir / METADATA_FILENAME).exists(),
+                     merged_path_s, Path(merged_path_s).exists())
         validation = validate_run(
-            meta_path=str(meta_dir / METADATA_FILENAME),
-            merged_path=str(merged_path),
+            meta_path=meta_path_s,
+            merged_path=merged_path_s,
             output_dir=str(gpt_dir),
             filename=VALIDATION_FILENAME,
             write_file=False,
         )
         # validation file is suppressed; no artifacts path
         if not validation.get("success"):
+            logger.error("Validation failed: error=%s", validation.get("error"))
             errors.append(make_error("VALIDATION_FAILED", details=str(validation.get("error"))))
             final_path = meta_dir / "final_result.json"
             result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
