@@ -314,10 +314,6 @@ def run_pipeline(
         with open(dtc_raw_path, "w", encoding="utf-8") as f:
             f.write(dtc_raw_str or "")
         dtc_filtered_path = filter_gpt_generic_response(str(dtc_raw_path), str(gpt_dir), filename=GPT_DOC_TYPE_FILTERED)
-        try:
-            os.remove(dtc_raw_path)
-        except Exception as e:
-            logger.debug("Failed to remove dtc_raw_path: %s", e, exc_info=True)
         artifacts["gpt_doc_type_check_filtered_path"] = str(dtc_filtered_path)
         with open(dtc_filtered_path, "r", encoding="utf-8") as f:
             dtc_obj = json.load(f)
