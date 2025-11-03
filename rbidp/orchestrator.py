@@ -96,18 +96,12 @@ def _build_final(
     run_id: str,
     errors: List[Dict[str, Any]],
     verdict: bool,
-    checks: Optional[Dict[str, Any]],
-    artifacts: Dict[str, str],
     final_path: Path,
 ) -> Dict[str, Any]:
-    artifacts = dict(artifacts)
-    artifacts.setdefault("final_result_path", str(final_path))
     result = {
         "run_id": run_id,
         "verdict": bool(verdict),
-        "errors": errors,
-        "checks": checks,
-        "artifacts": artifacts,
+        "errors": errors
     }
     _write_json(final_path, result)
     return result
@@ -138,7 +132,7 @@ def run_pipeline(
     except Exception as e:
         errors.append(make_error("FILE_SAVE_FAILED", details=str(e)))
         final_path = meta_dir / "final_result.json"
-        result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
+        result = _build_final(run_id, errors, verdict=False, final_path=final_path)
         manifest = {
             "run_id": run_id,
             "created_at": datetime.now().isoformat(),
@@ -171,7 +165,7 @@ def run_pipeline(
         if pages is not None and pages > 3:
             errors.append(make_error("PDF_TOO_MANY_PAGES"))
             final_path = meta_dir / "final_result.json"
-            result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
+            result = _build_final(run_id, errors, verdict=False, final_path=final_path)
             manifest = {
                 "run_id": run_id,
                 "created_at": datetime.now().isoformat(),
@@ -196,7 +190,7 @@ def run_pipeline(
     if not textract_result.get("success"):
         errors.append(make_error("OCR_FAILED", details=str(textract_result.get("error"))) )
         final_path = meta_dir / "final_result.json"
-        result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
+        result = _build_final(run_id, errors, verdict=False, final_path=final_path)
         manifest = {
             "run_id": run_id,
             "created_at": datetime.now().isoformat(),
@@ -226,7 +220,7 @@ def run_pipeline(
         if len(pages_obj["pages"]) == 0:
             errors.append(make_error("OCR_EMPTY_PAGES"))
             final_path = meta_dir / "final_result.json"
-            result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
+            result = _build_final(run_id, errors, verdict=False, final_path=final_path)
             manifest = {
                 "run_id": run_id,
                 "created_at": datetime.now().isoformat(),
@@ -251,7 +245,7 @@ def run_pipeline(
     except Exception as e:
         errors.append(make_error("OCR_FILTER_FAILED", details=str(e)))
         final_path = meta_dir / "final_result.json"
-        result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
+        result = _build_final(run_id, errors, verdict=False, final_path=final_path)
         manifest = {
             "run_id": run_id,
             "created_at": datetime.now().isoformat(),
@@ -285,7 +279,7 @@ def run_pipeline(
         if not isinstance(is_single, bool):
             errors.append(make_error("DTC_PARSE_ERROR"))
             final_path = meta_dir / "final_result.json"
-            result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
+            result = _build_final(run_id, errors, verdict=False, final_path=final_path)
             _write_json(meta_dir / "manifest.json", {
                 "run_id": run_id,
                 "created_at": datetime.now().isoformat(),
@@ -311,7 +305,7 @@ def run_pipeline(
         if is_single is False:
             errors.append(make_error("MULTIPLE_DOCUMENTS"))
             final_path = meta_dir / "final_result.json"
-            result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
+            result = _build_final(run_id, errors, verdict=False, final_path=final_path)
             _write_json(meta_dir / "manifest.json", {
                 "run_id": run_id,
                 "created_at": datetime.now().isoformat(),
@@ -337,7 +331,7 @@ def run_pipeline(
     except Exception as e:
         errors.append(make_error("DTC_FAILED", details=str(e)))
         final_path = meta_dir / "final_result.json"
-        result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
+        result = _build_final(run_id, errors, verdict=False, final_path=final_path)
         _write_json(meta_dir / "manifest.json", {
             "run_id": run_id,
             "created_at": datetime.now().isoformat(),
@@ -379,7 +373,7 @@ def run_pipeline(
     except ValueError as ve:
         errors.append(make_error("EXTRACT_SCHEMA_INVALID", details=str(ve)))
         final_path = meta_dir / "final_result.json"
-        result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
+        result = _build_final(run_id, errors, verdict=False, final_path=final_path)
         _write_json(meta_dir / "manifest.json", {
             "run_id": run_id,
             "created_at": datetime.now().isoformat(),
@@ -405,7 +399,7 @@ def run_pipeline(
     except Exception as e:
         errors.append(make_error("EXTRACT_FAILED", details=str(e)))
         final_path = meta_dir / "final_result.json"
-        result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
+        result = _build_final(run_id, errors, verdict=False, final_path=final_path)
         _write_json(meta_dir / "manifest.json", {
             "run_id": run_id,
             "created_at": datetime.now().isoformat(),
@@ -435,7 +429,7 @@ def run_pipeline(
     except Exception as e:
         errors.append(make_error("MERGE_FAILED", details=str(e)))
         final_path = meta_dir / "final_result.json"
-        result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
+        result = _build_final(run_id, errors, verdict=False, final_path=final_path)
         _write_json(meta_dir / "manifest.json", {
             "run_id": run_id,
             "created_at": datetime.now().isoformat(),
@@ -465,7 +459,7 @@ def run_pipeline(
         if not validation.get("success"):
             errors.append(make_error("VALIDATION_FAILED", details=str(validation.get("error"))))
             final_path = meta_dir / "final_result.json"
-            result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
+            result = _build_final(run_id, errors, verdict=False, final_path=final_path)
             _write_json(meta_dir / "manifest.json", {
                 "run_id": run_id,
                 "created_at": datetime.now().isoformat(),
@@ -512,7 +506,7 @@ def run_pipeline(
         errors.extend(check_errors)
 
         final_path = meta_dir / "final_result.json"
-        result = _build_final(run_id, errors, verdict=verdict, checks=checks, artifacts=artifacts, final_path=final_path)
+        result = _build_final(run_id, errors, verdict=verdict, final_path=final_path)
 
         manifest = {
             "run_id": run_id,
@@ -544,7 +538,7 @@ def run_pipeline(
     except Exception as e:
         errors.append(make_error("VALIDATION_FAILED", details=str(e)))
         final_path = meta_dir / "final_result.json"
-        result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
+        result = _build_final(run_id, errors, verdict=False, final_path=final_path)
         _write_json(meta_dir / "manifest.json", {
             "run_id": run_id,
             "created_at": datetime.now().isoformat(),
