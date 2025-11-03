@@ -522,7 +522,7 @@ def run_pipeline(
     try:
         validation = validate_run(
             meta_path=str(meta_dir / METADATA_FILENAME),
-            merged_path=str(artifacts.get("gpt_merged_path", "")),
+            merged_path=str(merged_path),
             output_dir=str(gpt_dir),
             filename=VALIDATION_FILENAME,
             write_file=False,
