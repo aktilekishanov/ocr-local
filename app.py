@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 import uuid
+import tempfile
 import streamlit as st
 
 from rbidp.clients.textract_client import ask_textract
@@ -24,6 +25,8 @@ from rbidp.core.config import (
     VALIDATION_FILENAME,
     METADATA_FILENAME,
 )
+from rbidp.orchestrator import run_pipeline
+from rbidp.core.errors import message_for
 try:
     import pypdf as _pypdf
 except Exception:
@@ -205,265 +208,79 @@ if submitted:
     elif doc_type == "Выберите тип документа":
         st.warning("Пожалуйста, выберите тип документа")
     else:
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        short_id = uuid.uuid4().hex[:5]
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        run_id = f"{ts}_{short_id}"
-        base_dir = RUNS_DIR / date_str / run_id
-        input_dir = base_dir / "input" / "original"
-        ocr_dir = base_dir / "ocr"
-        gpt_dir = base_dir / "gpt"
-        meta_dir = base_dir / "meta"
-        for d in (input_dir, ocr_dir, gpt_dir, meta_dir):
-            d.mkdir(parents=True, exist_ok=True)
+        # Save uploaded file to a temporary location and call orchestrator once
+        tmp_dir = tempfile.mkdtemp(prefix="upload_")
+        tmp_path = Path(tmp_dir) / _safe_filename(uploaded_file.name)
+        with open(tmp_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
 
-        base = _safe_filename(uploaded_file.name)
-        saved_path = input_dir / base
-        with st.status("Сохраняем файл...", state="running") as status:
-            with open(saved_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            status.update(label=f"Файл сохранен: {saved_path}", state="complete")
-
-        # DEBUG: file save
-        print(f"[DEBUG] Saved upload to: {saved_path}")
-
-        if saved_path.suffix.lower() == ".pdf":
-            pages = _count_pdf_pages(str(saved_path))
-            if pages is not None and pages > 3:
-                st.error("PDF должен содержать не более 3 страниц")
-                st.stop()
-
-        # Persist user input metadata early
-        try:
-            metadata = {
-                "fio": fio or None,
-                "reason": reason,
-                "doc_type": doc_type,
-            }
-            with open(meta_dir / METADATA_FILENAME, "w", encoding="utf-8") as mf:
-                json.dump(metadata, mf, ensure_ascii=False, indent=2)
-            print(f"[DEBUG] Early metadata written to: {meta_dir / METADATA_FILENAME}")
-        except Exception as e:
-            print(f"[DEBUG] Failed to write early metadata: {e}")
-
-        # Run Textract pipeline
-        try:
-            with st.status("Textract: Распознавание...", state="running") as status:
-                textract_result = ask_textract(str(saved_path), output_dir=str(ocr_dir), save_json=True)
-            # DEBUG: textract call result
-            print(
-                "[DEBUG] Textract result:",
-                {
-                    "success": textract_result.get("success"),
-                    "error": textract_result.get("error"),
-                    "raw_path": textract_result.get("raw_path"),
-                },
+        with st.spinner("Обрабатываем документ..."):
+            result = run_pipeline(
+                fio=fio or None,
+                reason=reason,
+                doc_type=doc_type,
+                source_file_path=str(tmp_path),
+                original_filename=uploaded_file.name,
+                content_type=getattr(uploaded_file, "type", None),
+                runs_root=RUNS_DIR,
             )
 
-            # Step 1: Textract status
-            if not textract_result.get("success"):
-                err_msg = textract_result.get("error") or "OCR сервис вернул неуспешный статус"
-                status.update(label=f"Textract: Ошибка распознавания: {err_msg}", state="error")
-                st.error(f"Ошибка распознавания: {err_msg}")
-                st.stop()
+        st.subheader("Результат проверки")
+        verdict = bool(result.get("verdict", False))
+        errors = result.get("errors", []) or []
+        artifacts = result.get("artifacts", {}) or {}
 
-            try:
-                status.update(label="Textract: Распознавание успешно завершено", state="complete")
-            except Exception:
-                pass
-            # DEBUG: textract success
-            print("[DEBUG] Textract success: proceeding to filter_textract_response")
+        if verdict:
+            st.success("Вердикт: True — документ прошел проверку")
+        else:
+            st.error("Вердикт: False — документ не прошел проверку")
 
-            # Step 2: Filter Textract into pages JSON
-            filtered_textract_response_path = ""
-            with st.status("Textract: Фильтрация...", state="running") as status:
-                try:
-                    filtered_textract_response_path = filter_textract_response(textract_result.get("raw_obj", {}), str(ocr_dir), filename=TEXTRACT_PAGES)
-                    # DEBUG: filter output path
-                    print(f"[DEBUG] Filtered Textract written to: {filtered_textract_response_path}")
-                except Exception as e:
-                    status.update(label=f"Textract: Ошибка фильтрации: {e}", state="error")
-                    st.error(f"Ошибка обработки страниц OCR: {e}")
-                    # DEBUG: filter error
-                    print(f"[DEBUG] Error in filter_textract_response: {e}")
-                    st.stop()
-
-                with open(filtered_textract_response_path, "r", encoding="utf-8") as f:
-                    pages_obj = json.load(f)
-                try:
-                    status.update(label="Textract: Фильтрация успешно завершена", state="complete")
-                except Exception:
-                    pass
-            # DEBUG: pages stats
-            try:
-                _pages_len = len(pages_obj.get("pages", [])) if isinstance(pages_obj, dict) else None
-            except Exception:
-                _pages_len = None
-            print(f"[DEBUG] pages_obj loaded. pages count: {_pages_len}")
-
-            # Filter step status checks before proceeding to GPT
-            if not isinstance(pages_obj, dict) or not isinstance(pages_obj.get("pages"), list):
-                st.error("Ошибка: некорректный формат результатов OCR страниц")
-                st.stop()
-            if len(pages_obj["pages"]) == 0:
-                st.error("Ошибка: не удалось получить текст страниц из OCR")
-                # DEBUG: empty pages
-                print("[DEBUG] No pages extracted from OCR")
-                st.stop()
-
-            # Doc type checker step (before GPT)
-            # DEBUG: starting doc type checker
-            print("[DEBUG] Starting doc type checker with pages_obj")
-            with st.status("GPT: Проверка на тип документа...", state="running") as status:
-                dtc_step = run_doc_type_checker(pages_obj, gpt_dir)
-                if not dtc_step.get("success"):
-                    status.update(label=f"GPT: Ошибка проверки на тип документа: {dtc_step.get('error')}", state="error")
-                    st.error(f"Ошибка проверки типа документа: {dtc_step.get('error')}")
-                    # DEBUG: doc type checker error
-                    print(f"[DEBUG] Doc type checker error: {dtc_step.get('error')}")
-                    st.stop()
+        if errors:
+            st.markdown("**Ошибки**")
+            for e in errors:
+                code = e.get("code")
+                msg = message_for(code) or e.get("message") or str(code)
+                details = e.get("details")
+                if details:
+                    st.write(f"- {msg} — {details}")
                 else:
-                    # Filter the doc type check raw into stable JSON (generic filter)
-                    dtc_raw_path = dtc_step.get("raw_path")
-                    try:
-                        dtc_filtered_path = filter_gpt_generic_response(dtc_raw_path, str(gpt_dir), filename=GPT_DOC_TYPE_FILTERED)
-                        print(f"[DEBUG] Doc type filter success. filtered_path={dtc_filtered_path}")
-                        try:
-                            with open(dtc_filtered_path, "r", encoding="utf-8") as df:
-                                dtc_obj = json.load(df)
-                            is_single = dtc_obj.get("single_doc_type") if isinstance(dtc_obj, dict) else None
-                        except Exception as _e:
-                            is_single = None
-                        if is_single is False:
-                            status.update(label="GPT: Проверка на тип документа — не единый тип", state="error")
-                            st.error("Документ должен быть одного типа. Загрузите один документ.")
-                            st.stop()
-                        try:
-                            status.update(label="GPT: Проверка на тип документа успешно завершена", state="complete")
-                        except Exception:
-                            pass
-                    except Exception as e:
-                        print(f"[DEBUG] Doc type filter failed: {e}")
-                        status.update(label=f"GPT: Ошибка фильтра doc_type_check: {e}", state="error")
-                        st.error(f"Ошибка фильтра doc_type_check: {e}")
-                        st.stop()
+                    st.write(f"- {msg}")
 
-            # Run GPT steps when pages exist (no per-page preview UI)
-            if isinstance(pages_obj.get("pages"), list) and len(pages_obj["pages"]) > 0:
-                # DEBUG: starting GPT extractor
-                print("[DEBUG] Starting GPT extractor with pages_obj")
-                with st.status("GPT: Извлечение нужных значений...", state="running") as status:
-                    gpt_step = run_gpt_extractor(pages_obj, gpt_dir)
-                    if not gpt_step.get("success"):
-                        status.update(label=f"GPT: Ошибка извлечения: {gpt_step.get('error')}", state="error")
-                        st.error(f"Ошибка GPT: {gpt_step.get('error')}")
-                        # DEBUG: gpt extractor error
-                        print(f"[DEBUG] GPT extractor error: {gpt_step.get('error')}")
-                        st.stop()
-                    filter_step = run_filter_gpt(gpt_step.get("raw_path", ""), gpt_dir)
-                    if filter_step.get("success"):
-                        fp = filter_step.get("filtered_path")
-                        # DEBUG: gpt filter success
-                        print(f"[DEBUG] GPT filter success. filtered_path={fp}")
-                        try:
-                            status.update(label="GPT: Извлечение нужных значений успешно завершено", state="complete")
-                        except Exception:
-                            pass
-                    else:
-                        status.update(label=f"GPT: Ошибка фильтрации: {filter_step.get('error')}", state="error")
-                        st.error(f"Ошибка фильтрации GPT: {filter_step.get('error')}")
-                        st.stop()
-                        # DEBUG: gpt filter failure
-                        print("[DEBUG] GPT filter failed; showing fallback (obj or raw)")
+        # Download buttons
+        final_result_path = artifacts.get("final_result_path")
+        if isinstance(final_result_path, str) and os.path.exists(final_result_path):
+            with open(final_result_path, "rb") as fb:
+                st.download_button(
+                    label="Скачать итог (final_result.json)",
+                    data=fb.read(),
+                    file_name="final_result.json",
+                    mime="application/json",
+                )
 
-                with st.status("Валидация: проверка...", state="running") as status_merge:
-                    try:
-                        merged_path = merge_extractor_and_doc_type(
-                            extractor_filtered_path=fp,
-                            doc_type_filtered_path=dtc_filtered_path,
-                            output_dir=str(gpt_dir),
-                            filename=MERGED_FILENAME,
-                        )
-                        with open(merged_path, "r", encoding="utf-8") as mf:
-                            merged = json.load(mf)
-                        # Validate merged.json against metadata.json
-                        try:
-                            validation = validate_run(
-                                meta_path=str((base_dir / "meta" / "metadata.json")),
-                                merged_path=str(merged_path),
-                                output_dir=str(gpt_dir),
-                                filename=VALIDATION_FILENAME,
-                            )
-                            if not validation.get("success"):
-                                status_merge.update(label=f"Валидация завершена с ошибкой: {validation.get('error')}", state="error")
-                                st.error(f"Ошибка валидации: {validation.get('error')}")
-                                st.stop()
-                            val_result = validation.get("result", {})
-                            validation_path = validation.get("validation_path", "")
-                            st.subheader("Результат проверки")
-                            st.json(val_result)
-                            with open(merged_path, "rb") as mb:
-                                st.download_button(
-                                    label="Скачать JSON (итог)",
-                                    data=mb.read(),
-                                    file_name=MERGED_FILENAME,
-                                    mime="application/json",
-                                )
-                            print(f"[DEBUG] Validation written to: {validation_path}")
-                            try:
-                                status_merge.update(label="Валидация успешно завершена", state="complete")
-                            except Exception:
-                                pass
-                        except Exception as ve:
-                            status_merge.update(label=f"Валидация завершена с ошибкой: {ve}", state="error")
-                            st.error(f"Ошибка валидации: {ve}")
-                            st.stop()
-                        print(f"[DEBUG] Merged JSON written to: {merged_path}")
-                    except Exception as me:
-                        status_merge.update(label=f"Ошибка при формировании merged.json: {me}", state="error")
-                        st.error(f"Ошибка при формировании merged.json: {me}")
-                        st.stop()
-            else:
-                st.info("Нет распознанных страниц в результате")
-                # DEBUG: no pages to process
-                print("[DEBUG] Skipping GPT: no pages to process")
+        merged_path = artifacts.get("gpt_merged_path")
+        if isinstance(merged_path, str) and os.path.exists(merged_path):
+            with open(merged_path, "rb") as mb:
+                st.download_button(
+                    label="Скачать JSON (итог, merged.json)",
+                    data=mb.read(),
+                    file_name=MERGED_FILENAME,
+                    mime="application/json",
+                )
+
+        validation_path = artifacts.get("validation_path")
+        if isinstance(validation_path, str) and os.path.exists(validation_path):
+            with open(validation_path, "rb") as vb:
+                st.download_button(
+                    label="Скачать JSON (validation.json)",
+                    data=vb.read(),
+                    file_name=VALIDATION_FILENAME,
+                    mime="application/json",
+                )
+            # Diagnostics view
             try:
-                manifest = {
-                    "run_id": run_id,
-                    "created_at": datetime.now().isoformat(),
-                    "user_input": {
-                        "fio": fio or None,
-                        "reason": reason,
-                        "doc_type": doc_type,
-                    },
-                    "file": {
-                        "original_filename": uploaded_file.name,
-                        "saved_path": str(saved_path),
-                        "content_type": getattr(uploaded_file, "type", None),
-                        "size_bytes": saved_path.stat().st_size if saved_path.exists() else None,
-                    },
-                    "processing": {
-                        "ocr_engine": "textract",
-                        "ocr_raw_path": str(ocr_dir / TEXTRACT_RAW),
-                        "ocr_pages_filtered_path": str(filtered_textract_response_path or ""),
-                        "gpt_doc_type_check_filtered_path": str(gpt_dir / GPT_DOC_TYPE_FILTERED),
-                        "gpt_doc_type_check_path": str((gpt_dir / GPT_DOC_TYPE_RAW)),
-                        "gpt_extractor_raw_path": str(gpt_dir / GPT_EXTRACTOR_RAW),
-                        "gpt_extractor_filtered_path": str(gpt_dir / GPT_EXTRACTOR_FILTERED),
-                        "gpt_merged_path": str(gpt_dir / MERGED_FILENAME),
-                        "validation_path": str(gpt_dir / VALIDATION_FILENAME),
-                    },
-                    "status": "success",
-                    "error": None,
-                }
-                with open(meta_dir / "manifest.json", "w", encoding="utf-8") as mf:
-                    json.dump(manifest, mf, ensure_ascii=False, indent=2)
-                # DEBUG: manifest written
-                print(f"[DEBUG] Manifest written to: {meta_dir / 'manifest.json'}")
+                with open(validation_path, "r", encoding="utf-8") as vf:
+                    val_obj = json.load(vf)
+                with st.expander("Диагностика (подробно)"):
+                    st.json(val_obj)
             except Exception:
                 pass
-        except Exception as e:
-            st.error(f"Ошибка распознавания: {e}")
-            # DEBUG: outer exception
-            print(f"[DEBUG] Top-level processing error: {e}")
-            st.exception(e)

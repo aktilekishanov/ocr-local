@@ -1,0 +1,23 @@
+timestamp: 2025-11-03 11:30:00 +0500
+
+# feat(orchestrator): extract end-to-end pipeline and refactor Streamlit UI to single-call flow
+
+- Add rbidp/orchestrator.py with run_pipeline(...) (no Streamlit deps)
+- Centralize error codes and RU messages in rbidp/core/errors.py
+- Always produce meta/final_result.json with {run_id, verdict, errors, checks?, artifacts}
+- Write/maintain meta/manifest.json and key artifact paths
+- Move GPT schema checks and error mapping into orchestrator
+- Update app.py to save upload to temp, call run_pipeline once, and render final card
+- Replace stop-on-error with uniform final result; add downloads for final_result.json, merged.json, validation.json
+- Ensure artifacts.final_result_path is always present
+
+Demo UX:
+- Business testers get a consistent verdict + errors, with diagnostics in expander
+- Local runs/ storage preserved (no MinIO)
+
+Refs: MVP Option B design (clean UI + reusable orchestrator)
+
+Test:
+- streamlit run app.py
+- Upload PDF/JPG/PNG and provide fio/reason/doc_type
+- Verify final card, error list, and downloads; inspect runs/<date>/<run_id>/meta/final_result.json
