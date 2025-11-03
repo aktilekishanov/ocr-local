@@ -129,11 +129,18 @@ def _build_final(
     artifacts: Dict[str, str],
     final_path: Path,
 ) -> Dict[str, Any]:
-    # Persist a minimal final_result.json (no checks/artifacts)
+    # Persist a minimal final_result.json (no checks/artifacts) with only error codes
+    file_errors = []
+    for e in errors:
+        if isinstance(e, dict) and "code" in e:
+            file_errors.append({"code": e.get("code")})
+        else:
+            # fallback if non-dict error
+            file_errors.append({"code": str(e)})
     file_result = {
         "run_id": run_id,
         "verdict": bool(verdict),
-        "errors": errors,
+        "errors": file_errors,
     }
     _write_json(final_path, file_result)
     # Return a minimal in-memory result as well, with a pointer to the file
