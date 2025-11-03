@@ -200,6 +200,5 @@ if submitted:
                             rows = []
                         if rows:
                             st.table(rows)
-                        st.json(side_by_side)
                 except Exception:
                     pass
