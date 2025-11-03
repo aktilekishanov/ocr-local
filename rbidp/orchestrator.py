@@ -89,7 +89,7 @@ def _write_manifest(
     merged_path = artifacts.get("gpt_merged_path")
     manifest = {
         "run_id": run_id,
-        "created_at": datetime.now().isoformat(),
+        "created_at": datetime.now().strftime("%d.%m.%Y"),
         "user_input": user_input,
         "file": file_info,
         "artifacts": {
