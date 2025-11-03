@@ -24,6 +24,14 @@ from rbidp.core.config import (
     VALIDATION_FILENAME,
     METADATA_FILENAME,
 )
+try:
+    import pypdf as _pypdf
+except Exception:
+    _pypdf = None
+try:
+    import PyPDF2 as _pypdf2
+except Exception:
+    _pypdf2 = None
 
 
 def run_gpt_extractor(pages_obj: dict, gpt_dir: Path) -> dict:
@@ -158,6 +166,27 @@ def _safe_filename(name: str) -> str:
     return name or "file"
 
 
+def _count_pdf_pages(path: str):
+    try:
+        if _pypdf is not None:
+            reader = _pypdf.PdfReader(path)
+            return len(reader.pages)
+    except Exception:
+        pass
+    try:
+        if _pypdf2 is not None:
+            reader = _pypdf2.PdfReader(path)
+            return len(reader.pages)
+    except Exception:
+        pass
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        return len(re.findall(br"/Type\s*/Page\b", data)) or None
+    except Exception:
+        return None
+
+
 # --- Upload form ---
 with st.form("upload_form", clear_on_submit=False):
     uploaded_file = st.file_uploader(
@@ -197,6 +226,12 @@ if submitted:
 
         # DEBUG: file save
         print(f"[DEBUG] Saved upload to: {saved_path}")
+
+        if saved_path.suffix.lower() == ".pdf":
+            pages = _count_pdf_pages(str(saved_path))
+            if pages is not None and pages > 3:
+                st.error("PDF должен содержать не более 3 страниц")
+                st.stop()
 
         # Persist user input metadata early
         try:
