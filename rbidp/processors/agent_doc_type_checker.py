@@ -37,68 +37,77 @@ import json
 # """
 
 PROMPT = """
-You are an **ultra-precise OCR document-type classifier**.
+You are a deterministic **OCR document-type classifier**.
 
-Your task: Decide if the provided OCR text represents **one single document type** or **multiple distinct document types**.
+Your ONLY goal: decide if the OCR text represents ONE single document type or MULTIPLE distinct ones.
 
-Return **strictly** one JSON object:
+Respond strictly with:
 {"single_doc_type": true}
 or
 {"single_doc_type": false}
 
-### PRIMARY OBJECTIVE
-Focus on the *purpose* and *issuer* of the document — not formatting, duplication, or noise.
-You must be conservative: only output `false` if there is **clear and explicit** evidence that more than one separate document exists.
-
 ---
 
-### RULE HIERARCHY (most important first)
-1. **Default to true.** If it’s not obvious that multiple documents exist, output `true`.
-2. **Ignore all OCR noise**, random English words, partial lines, numbers, or page fragments. These are NOT indicators of a second document.
-3. **Ignore repetition** of headers, bilingual text (Kazakh/Russian), stamps, or partial duplicates — they belong to the same document.
-4. **Output false only if** you detect at least one of the following:
-   - Two or more different document names (e.g., “ПРИКАЗ” and “СПРАВКА”).
-   - Two distinct issuers or organizations (e.g., different ministries or companies).
-   - Two unrelated people or identifiers (e.g., two different names or form numbers with unrelated context).
-   - Two clearly separate document purposes (e.g., employment order vs. medical certificate).
-5. **Do not overfit to surface noise.** Assume OCR outputs are messy and incomplete — reason at the semantic level.
+### DECISION ALGORITHM (must follow in order)
 
----
+1. **Noise Filtering**
+Ignore all OCR artifacts:
+- Random English words
+- Repeated headers
+- Mixed languages
+- Page numbers
+- Dates, years, or form numbers repeated
+These NEVER create new document types.
 
-### HEURISTICS & TESTS
-- All fragments could plausibly belong to one form → true.
-- If you are uncertain but there’s no explicit contradiction → true.
-- Random English tokens like “STATE”, “REPAIR”, “AMERICAN” → ignore → still true.
-- A page break or repeated number → ignore → still true.
-- Only when the text clearly shows multiple *independent* documents → false.
+2. **Purpose Detection**
+Ask yourself: “Do all parts of the text revolve around the same general document purpose (e.g., medical certificate, order, ID)?”
+If yes → STOP → return {"single_doc_type": true}.
+
+3. **Issuer Check**
+Are there clearly two unrelated organizations or issuers (e.g., two ministries or companies)?
+If not → still one document → return {"single_doc_type": true}.
+
+4. **Form / Person Check**
+Do you see two different form names (e.g., “026/y” and “027/y”), or two distinct person names?
+If not → still one document → return {"single_doc_type": true}.
+
+5. **Contradiction Check**
+Only if you find **two clearly independent document purposes or issuers** → then and only then → {"single_doc_type": false}.
+
+If any step is unclear, uncertain, or noisy → default to {"single_doc_type": true}.
+
+6. **Internal Control**
+Never output {"single_doc_type": false} unless you can quote in your mind two clearly different document titles.
+If no explicit title difference → always output {"single_doc_type": true}.
+
 
 ---
 
 ### EXAMPLES
-true:
-- “БҰЙРЫҚ / ПРИКАЗ” bilingual duplicate of one order.
-- Medical form with OCR garbage like “AMERICAN”, “STATE”, “Repair”.
-- Repeated header due to scanning errors.
+✅ true:
+- Medical form with repeated headers or bilingual lines.
+- Same form number repeated twice.
+- “Заключение комиссии” with random English tokens.
 
-false:
-- “ПРИКАЗ” followed by “СПРАВКА” (two unrelated forms).
-- Two separate letters, each signed by a different person.
-- One page refers to an employment order, another to a marriage certificate.
+❌ false:
+- “ПРИКАЗ” followed by “СПРАВКА”.
+- Two distinct ministries or organizations with unrelated context.
 
 ---
 
-### OUTPUT REQUIREMENTS
-- Respond **only** with:
-  {"single_doc_type": true}
-  or
-  {"single_doc_type": false}
-- No explanations, no text before or after, no additional symbols.
+### OUTPUT FORMAT
+Output only:
+{"single_doc_type": true}
+or
+{"single_doc_type": false}
+No text, no reasoning, no punctuation.
 
 ---
 
 OCR INPUT:
 {}
 """
+
 
 
 def check_single_doc_type(pages_obj: dict) -> str:
