@@ -83,13 +83,14 @@ def _write_manifest(
     artifacts: Dict[str, Any],
     status: str,
     error: Optional[str],
+    created_at: str,
 ) -> None:
     final_result_path = artifacts.get("final_result_path") or str(meta_dir / "final_result.json")
     side_by_side_path = str(meta_dir / "side_by_side.json") if (meta_dir / "side_by_side.json").exists() else None
     merged_path = artifacts.get("gpt_merged_path")
     manifest = {
         "run_id": run_id,
-        "created_at": datetime.now().strftime("%d.%m.%Y"),
+        "created_at": created_at,
         "user_input": user_input,
         "file": file_info,
         "artifacts": {
@@ -168,7 +169,7 @@ def run_pipeline(
     runs_root: Path,
 ) -> Dict[str, Any]:
     run_id = _now_id()
-    request_created_at = datetime.now(timezone(timedelta(hours=UTC_OFFSET_HOURS))).isoformat()
+    request_created_at = datetime.now(timezone(timedelta(hours=UTC_OFFSET_HOURS))).strftime("%d.%m.%Y")
     dirs = _mk_run_dirs(runs_root, run_id)
     base_dir, input_dir, ocr_dir, gpt_dir, meta_dir = (
         dirs["base"], dirs["input"], dirs["ocr"], dirs["gpt"], dirs["meta"]
@@ -198,6 +199,7 @@ def run_pipeline(
             artifacts={"final_result_path": str(final_path)},
             status="error",
             error="FILE_SAVE_FAILED",
+            created_at=request_created_at,
         )
         return result
 
@@ -229,6 +231,7 @@ def run_pipeline(
                 artifacts={"final_result_path": str(final_path)},
                 status="error",
                 error="PDF_TOO_MANY_PAGES",
+                created_at=request_created_at,
             )
             return result
 
@@ -251,6 +254,7 @@ def run_pipeline(
             artifacts={"final_result_path": str(final_path)},
             status="error",
             error="OCR_FAILED",
+            created_at=request_created_at,
         )
         return result
 
@@ -279,6 +283,7 @@ def run_pipeline(
                 artifacts={"final_result_path": str(final_path)},
                 status="error",
                 error="OCR_EMPTY_PAGES",
+                created_at=request_created_at,
             )
             return result
     except Exception as e:
@@ -298,6 +303,7 @@ def run_pipeline(
             artifacts={"final_result_path": str(final_path)},
             status="error",
             error="OCR_FILTER_FAILED",
+            created_at=request_created_at,
         )
         return result
 
@@ -333,6 +339,7 @@ def run_pipeline(
                 artifacts={"final_result_path": str(final_path)},
                 status="error",
                 error="DTC_PARSE_ERROR",
+                created_at=request_created_at,
             )
             return result
         if is_single is False:
@@ -352,6 +359,7 @@ def run_pipeline(
                 artifacts={"final_result_path": str(final_path)},
                 status="error",
                 error="MULTIPLE_DOCUMENTS",
+                created_at=request_created_at,
             )
             return result
     except Exception as e:
@@ -371,6 +379,7 @@ def run_pipeline(
             artifacts={"final_result_path": str(final_path)},
             status="error",
             error="DTC_FAILED",
+            created_at=request_created_at,
         )
         return result
 
@@ -414,6 +423,7 @@ def run_pipeline(
             artifacts={"final_result_path": str(final_path)},
             status="error",
             error="EXTRACT_SCHEMA_INVALID",
+            created_at=request_created_at,
         )
         return result
     except Exception as e:
@@ -433,6 +443,7 @@ def run_pipeline(
             artifacts={"final_result_path": str(final_path)},
             status="error",
             error="EXTRACT_FAILED",
+            created_at=request_created_at,
         )
         return result
 
@@ -507,6 +518,7 @@ def run_pipeline(
             artifacts={"final_result_path": str(final_path)},
             status="error",
             error="MERGE_FAILED",
+            created_at=request_created_at,
         )
         return result
 
@@ -537,6 +549,7 @@ def run_pipeline(
                 artifacts={"final_result_path": str(final_path), "gpt_merged_path": artifacts.get("gpt_merged_path", "")},
                 status="error",
                 error="VALIDATION_FAILED",
+                created_at=request_created_at,
             )
             return result
 
@@ -577,6 +590,7 @@ def run_pipeline(
             },
             status="success",
             error=None,
+            created_at=request_created_at,
         )
         return result
     except Exception as e:
@@ -599,5 +613,6 @@ def run_pipeline(
             },
             status="error",
             error="VALIDATION_FAILED",
+            created_at=request_created_at,
         )
         return result
