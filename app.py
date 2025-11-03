@@ -327,8 +327,17 @@ if submitted:
                     dtc_raw_path = dtc_step.get("raw_path")
                     try:
                         dtc_filtered_path = filter_gpt_generic_response(dtc_raw_path, str(gpt_dir), filename=GPT_DOC_TYPE_FILTERED)
-                        # DEBUG: doc type filter success
                         print(f"[DEBUG] Doc type filter success. filtered_path={dtc_filtered_path}")
+                        try:
+                            with open(dtc_filtered_path, "r", encoding="utf-8") as df:
+                                dtc_obj = json.load(df)
+                            is_single = dtc_obj.get("single_doc_type") if isinstance(dtc_obj, dict) else None
+                        except Exception as _e:
+                            is_single = None
+                        if is_single is False:
+                            status.update(label="GPT: Проверка на тип документа — не единый тип", state="error")
+                            st.error("Документ должен быть одного типа. Загрузите один документ.")
+                            st.stop()
                         try:
                             status.update(label="GPT: Проверка на тип документа успешно завершена", state="complete")
                         except Exception:
