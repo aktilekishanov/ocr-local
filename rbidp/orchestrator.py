@@ -558,15 +558,23 @@ def run_pipeline(
         verdict = bool(val_result.get("verdict")) if isinstance(val_result, dict) else False
         check_errors: List[Dict[str, Any]] = []
         if isinstance(checks, dict):
-            if checks.get("fio_match") is False:
+            fm = checks.get("fio_match")
+            if fm is False:
                 check_errors.append(make_error("FIO_MISMATCH"))
-            if checks.get("doc_type_match") is False:
+            elif fm is None:
+                check_errors.append(make_error("FIO_MISSING"))
+
+            dtm = checks.get("doc_type_match")
+            if dtm is False:
                 check_errors.append(make_error("DOC_TYPE_MISMATCH"))
+            elif dtm is None:
+                check_errors.append(make_error("DOC_TYPE_MISSING"))
+
             dv = checks.get("doc_date_valid")
             if dv is False:
                 check_errors.append(make_error("DOC_DATE_TOO_OLD"))
             elif dv is None:
-                check_errors.append(make_error("DOC_DATE_PARSE_FAILED"))
+                check_errors.append(make_error("DOC_DATE_MISSING"))
             if checks.get("single_doc_type_valid") is False:
                 check_errors.append(make_error("SINGLE_DOC_TYPE_INVALID"))
         errors.extend(check_errors)

@@ -27,9 +27,11 @@ ERROR_MESSAGES_RU: Dict[str, str] = {
 
     # Check-derived
     "FIO_MISMATCH": "ФИО не совпадает",
+    "FIO_MISSING": "Не удалось извлечь ФИО из документа",
     "DOC_TYPE_MISMATCH": "Неверный тип документа",
+    "DOC_TYPE_MISSING": "Не удалось определить тип документа",
     "DOC_DATE_TOO_OLD": "Устаревшая дата документа",
-    "DOC_DATE_PARSE_FAILED": "Не удалось распознать дату документа",
+    "DOC_DATE_MISSING": "Не удалось распознать дату документа",
     "SINGLE_DOC_TYPE_INVALID": "Файл содержит несколько типов документов",
 }
 
