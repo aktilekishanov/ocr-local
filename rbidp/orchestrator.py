@@ -4,7 +4,7 @@ import json
 import uuid
 import shutil
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 
 from rbidp.clients.textract_client import ask_textract
@@ -66,6 +66,35 @@ def _write_json(path: Path, obj: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False, indent=2)
+
+
+def _write_manifest(
+    meta_dir: Path,
+    *,
+    run_id: str,
+    user_input: Dict[str, Any],
+    file_info: Dict[str, Any],
+    artifacts: Dict[str, Any],
+    status: str,
+    error: Optional[str],
+) -> None:
+    final_result_path = artifacts.get("final_result_path") or str(meta_dir / "final_result.json")
+    side_by_side_path = str(meta_dir / "side_by_side.json") if (meta_dir / "side_by_side.json").exists() else None
+    merged_path = artifacts.get("gpt_merged_path")
+    manifest = {
+        "run_id": run_id,
+        "created_at": datetime.now().isoformat(),
+        "user_input": user_input,
+        "file": file_info,
+        "artifacts": {
+            "final_result_path": final_result_path,
+            "side_by_side_path": side_by_side_path,
+            "merged_path": merged_path,
+        },
+        "status": status,
+        "error": error,
+    }
+    _write_json(meta_dir / "manifest.json", manifest)
 
 
 def _now_id() -> str:
@@ -142,22 +171,20 @@ def run_pipeline(
         errors.append(make_error("FILE_SAVE_FAILED", details=str(e)))
         final_path = meta_dir / "final_result.json"
         result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
-        manifest = {
-            "run_id": run_id,
-            "created_at": datetime.now().isoformat(),
-            "user_input": {"fio": fio or None, "reason": reason, "doc_type": doc_type},
-            "file": {
+        _write_manifest(
+            meta_dir,
+            run_id=run_id,
+            user_input={"fio": fio or None, "reason": reason, "doc_type": doc_type},
+            file_info={
                 "original_filename": original_filename,
                 "saved_path": str(saved_path),
                 "content_type": content_type,
                 "size_bytes": None,
             },
-            "processing": {},
-            "status": "error",
-            "error": "FILE_SAVE_FAILED",
-            "final_result_path": str(final_path),
-        }
-        _write_json(meta_dir / "manifest.json", manifest)
+            artifacts={"final_result_path": str(final_path)},
+            status="error",
+            error="FILE_SAVE_FAILED",
+        )
         return result
 
     size_bytes = None
@@ -175,47 +202,42 @@ def run_pipeline(
             errors.append(make_error("PDF_TOO_MANY_PAGES"))
             final_path = meta_dir / "final_result.json"
             result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
-            manifest = {
-                "run_id": run_id,
-                "created_at": datetime.now().isoformat(),
-                "user_input": {"fio": fio or None, "reason": reason, "doc_type": doc_type},
-                "file": {
+            _write_manifest(
+                meta_dir,
+                run_id=run_id,
+                user_input={"fio": fio or None, "reason": reason, "doc_type": doc_type},
+                file_info={
                     "original_filename": original_filename,
                     "saved_path": str(saved_path),
                     "content_type": content_type,
                     "size_bytes": size_bytes,
                 },
-                "processing": {},
-                "status": "error",
-                "error": "PDF_TOO_MANY_PAGES",
-                "final_result_path": str(final_path),
-            }
-            _write_json(meta_dir / "manifest.json", manifest)
+                artifacts={"final_result_path": str(final_path)},
+                status="error",
+                error="PDF_TOO_MANY_PAGES",
+            )
             return result
 
     # OCR
-    textract_result = ask_textract(str(saved_path), output_dir=str(ocr_dir), save_json=True)
-    artifacts["ocr_raw_path"] = str(ocr_dir / TEXTRACT_RAW)
+    textract_result = ask_textract(str(saved_path), output_dir=str(ocr_dir), save_json=False)
     if not textract_result.get("success"):
         errors.append(make_error("OCR_FAILED", details=str(textract_result.get("error"))) )
         final_path = meta_dir / "final_result.json"
         result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
-        manifest = {
-            "run_id": run_id,
-            "created_at": datetime.now().isoformat(),
-            "user_input": {"fio": fio or None, "reason": reason, "doc_type": doc_type},
-            "file": {
+        _write_manifest(
+            meta_dir,
+            run_id=run_id,
+            user_input={"fio": fio or None, "reason": reason, "doc_type": doc_type},
+            file_info={
                 "original_filename": original_filename,
                 "saved_path": str(saved_path),
                 "content_type": content_type,
                 "size_bytes": size_bytes,
             },
-            "processing": {"ocr_engine": "textract"},
-            "status": "error",
-            "error": "OCR_FAILED",
-            "final_result_path": str(final_path),
-        }
-        _write_json(meta_dir / "manifest.json", manifest)
+            artifacts={"final_result_path": str(final_path)},
+            status="error",
+            error="OCR_FAILED",
+        )
         return result
 
     # Filter OCR pages
@@ -230,47 +252,39 @@ def run_pipeline(
             errors.append(make_error("OCR_EMPTY_PAGES"))
             final_path = meta_dir / "final_result.json"
             result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
-            manifest = {
-                "run_id": run_id,
-                "created_at": datetime.now().isoformat(),
-                "user_input": {"fio": fio or None, "reason": reason, "doc_type": doc_type},
-                "file": {
+            _write_manifest(
+                meta_dir,
+                run_id=run_id,
+                user_input={"fio": fio or None, "reason": reason, "doc_type": doc_type},
+                file_info={
                     "original_filename": original_filename,
                     "saved_path": str(saved_path),
                     "content_type": content_type,
                     "size_bytes": size_bytes,
                 },
-                "processing": {
-                    "ocr_engine": "textract",
-                    "ocr_raw_path": str(ocr_dir / TEXTRACT_RAW),
-                    "ocr_pages_filtered_path": str(filtered_pages_path),
-                },
-                "status": "error",
-                "error": "OCR_EMPTY_PAGES",
-                "final_result_path": str(final_path),
-            }
-            _write_json(meta_dir / "manifest.json", manifest)
+                artifacts={"final_result_path": str(final_path)},
+                status="error",
+                error="OCR_EMPTY_PAGES",
+            )
             return result
     except Exception as e:
         errors.append(make_error("OCR_FILTER_FAILED", details=str(e)))
         final_path = meta_dir / "final_result.json"
         result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
-        manifest = {
-            "run_id": run_id,
-            "created_at": datetime.now().isoformat(),
-            "user_input": {"fio": fio or None, "reason": reason, "doc_type": doc_type},
-            "file": {
+        _write_manifest(
+            meta_dir,
+            run_id=run_id,
+            user_input={"fio": fio or None, "reason": reason, "doc_type": doc_type},
+            file_info={
                 "original_filename": original_filename,
                 "saved_path": str(saved_path),
                 "content_type": content_type,
                 "size_bytes": size_bytes,
             },
-            "processing": {"ocr_engine": "textract"},
-            "status": "error",
-            "error": "OCR_FILTER_FAILED",
-            "final_result_path": str(final_path),
-        }
-        _write_json(meta_dir / "manifest.json", manifest)
+            artifacts={"final_result_path": str(final_path)},
+            status="error",
+            error="OCR_FILTER_FAILED",
+        )
         return result
 
     # Doc type checker (GPT)
@@ -279,8 +293,11 @@ def run_pipeline(
         dtc_raw_path = gpt_dir / GPT_DOC_TYPE_RAW
         with open(dtc_raw_path, "w", encoding="utf-8") as f:
             f.write(dtc_raw_str or "")
-        artifacts["gpt_doc_type_check_path"] = str(dtc_raw_path)
         dtc_filtered_path = filter_gpt_generic_response(str(dtc_raw_path), str(gpt_dir), filename=GPT_DOC_TYPE_FILTERED)
+        try:
+            os.remove(dtc_raw_path)
+        except Exception:
+            pass
         artifacts["gpt_doc_type_check_filtered_path"] = str(dtc_filtered_path)
         with open(dtc_filtered_path, "r", encoding="utf-8") as f:
             dtc_obj = json.load(f)
@@ -289,73 +306,58 @@ def run_pipeline(
             errors.append(make_error("DTC_PARSE_ERROR"))
             final_path = meta_dir / "final_result.json"
             result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
-            _write_json(meta_dir / "manifest.json", {
-                "run_id": run_id,
-                "created_at": datetime.now().isoformat(),
-                "user_input": {"fio": fio or None, "reason": reason, "doc_type": doc_type},
-                "file": {
+            _write_manifest(
+                meta_dir,
+                run_id=run_id,
+                user_input={"fio": fio or None, "reason": reason, "doc_type": doc_type},
+                file_info={
                     "original_filename": original_filename,
                     "saved_path": str(saved_path),
                     "content_type": content_type,
                     "size_bytes": size_bytes,
                 },
-                "processing": {
-                    "ocr_engine": "textract",
-                    "ocr_raw_path": str(ocr_dir / TEXTRACT_RAW),
-                    "ocr_pages_filtered_path": str(artifacts.get("ocr_pages_filtered_path", "")),
-                    "gpt_doc_type_check_path": str(dtc_raw_path),
-                    "gpt_doc_type_check_filtered_path": str(dtc_filtered_path),
-                },
-                "status": "error",
-                "error": "DTC_PARSE_ERROR",
-                "final_result_path": str(final_path),
-            })
+                artifacts={"final_result_path": str(final_path)},
+                status="error",
+                error="DTC_PARSE_ERROR",
+            )
             return result
         if is_single is False:
             errors.append(make_error("MULTIPLE_DOCUMENTS"))
             final_path = meta_dir / "final_result.json"
             result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
-            _write_json(meta_dir / "manifest.json", {
-                "run_id": run_id,
-                "created_at": datetime.now().isoformat(),
-                "user_input": {"fio": fio or None, "reason": reason, "doc_type": doc_type},
-                "file": {
+            _write_manifest(
+                meta_dir,
+                run_id=run_id,
+                user_input={"fio": fio or None, "reason": reason, "doc_type": doc_type},
+                file_info={
                     "original_filename": original_filename,
                     "saved_path": str(saved_path),
                     "content_type": content_type,
                     "size_bytes": size_bytes,
                 },
-                "processing": {
-                    "ocr_engine": "textract",
-                    "ocr_raw_path": str(ocr_dir / TEXTRACT_RAW),
-                    "ocr_pages_filtered_path": str(artifacts.get("ocr_pages_filtered_path", "")),
-                    "gpt_doc_type_check_path": str(dtc_raw_path),
-                    "gpt_doc_type_check_filtered_path": str(dtc_filtered_path),
-                },
-                "status": "error",
-                "error": "MULTIPLE_DOCUMENTS",
-                "final_result_path": str(final_path),
-            })
+                artifacts={"final_result_path": str(final_path)},
+                status="error",
+                error="MULTIPLE_DOCUMENTS",
+            )
             return result
     except Exception as e:
         errors.append(make_error("DTC_FAILED", details=str(e)))
         final_path = meta_dir / "final_result.json"
         result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
-        _write_json(meta_dir / "manifest.json", {
-            "run_id": run_id,
-            "created_at": datetime.now().isoformat(),
-            "user_input": {"fio": fio or None, "reason": reason, "doc_type": doc_type},
-            "file": {
+        _write_manifest(
+            meta_dir,
+            run_id=run_id,
+            user_input={"fio": fio or None, "reason": reason, "doc_type": doc_type},
+            file_info={
                 "original_filename": original_filename,
                 "saved_path": str(saved_path),
                 "content_type": content_type,
                 "size_bytes": size_bytes,
             },
-            "processing": {"ocr_engine": "textract"},
-            "status": "error",
-            "error": "DTC_FAILED",
-            "final_result_path": str(final_path),
-        })
+            artifacts={"final_result_path": str(final_path)},
+            status="error",
+            error="DTC_FAILED",
+        )
         return result
 
     # Extraction (GPT)
@@ -364,9 +366,11 @@ def run_pipeline(
         gpt_raw_path = gpt_dir / GPT_EXTRACTOR_RAW
         with open(gpt_raw_path, "w", encoding="utf-8") as f:
             f.write(gpt_raw or "")
-        artifacts["gpt_extractor_raw_path"] = str(gpt_raw_path)
-
         filtered_path = filter_gpt_generic_response(str(gpt_raw_path), str(gpt_dir), filename=GPT_EXTRACTOR_FILTERED)
+        try:
+            os.remove(gpt_raw_path)
+        except Exception:
+            pass
         artifacts["gpt_extractor_filtered_path"] = str(filtered_path)
         with open(filtered_path, "r", encoding="utf-8") as f:
             filtered_obj = json.load(f)
@@ -383,47 +387,39 @@ def run_pipeline(
         errors.append(make_error("EXTRACT_SCHEMA_INVALID", details=str(ve)))
         final_path = meta_dir / "final_result.json"
         result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
-        _write_json(meta_dir / "manifest.json", {
-            "run_id": run_id,
-            "created_at": datetime.now().isoformat(),
-            "user_input": {"fio": fio or None, "reason": reason, "doc_type": doc_type},
-            "file": {
+        _write_manifest(
+            meta_dir,
+            run_id=run_id,
+            user_input={"fio": fio or None, "reason": reason, "doc_type": doc_type},
+            file_info={
                 "original_filename": original_filename,
                 "saved_path": str(saved_path),
                 "content_type": content_type,
                 "size_bytes": size_bytes,
             },
-            "processing": {
-                "ocr_engine": "textract",
-                "ocr_raw_path": str(ocr_dir / TEXTRACT_RAW),
-                "ocr_pages_filtered_path": str(artifacts.get("ocr_pages_filtered_path", "")),
-                "gpt_doc_type_check_filtered_path": artifacts.get("gpt_doc_type_check_filtered_path", ""),
-                "gpt_doc_type_check_path": artifacts.get("gpt_doc_type_check_path", ""),
-            },
-            "status": "error",
-            "error": "EXTRACT_SCHEMA_INVALID",
-            "final_result_path": str(final_path),
-        })
+            artifacts={"final_result_path": str(final_path)},
+            status="error",
+            error="EXTRACT_SCHEMA_INVALID",
+        )
         return result
     except Exception as e:
         errors.append(make_error("EXTRACT_FAILED", details=str(e)))
         final_path = meta_dir / "final_result.json"
         result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
-        _write_json(meta_dir / "manifest.json", {
-            "run_id": run_id,
-            "created_at": datetime.now().isoformat(),
-            "user_input": {"fio": fio or None, "reason": reason, "doc_type": doc_type},
-            "file": {
+        _write_manifest(
+            meta_dir,
+            run_id=run_id,
+            user_input={"fio": fio or None, "reason": reason, "doc_type": doc_type},
+            file_info={
                 "original_filename": original_filename,
                 "saved_path": str(saved_path),
                 "content_type": content_type,
                 "size_bytes": size_bytes,
             },
-            "processing": {"ocr_engine": "textract"},
-            "status": "error",
-            "error": "EXTRACT_FAILED",
-            "final_result_path": str(final_path),
-        })
+            artifacts={"final_result_path": str(final_path)},
+            status="error",
+            error="EXTRACT_FAILED",
+        )
         return result
 
     # Merge
@@ -435,25 +431,79 @@ def run_pipeline(
             filename=MERGED_FILENAME,
         )
         artifacts["gpt_merged_path"] = str(merged_path)
+        # Build side-by-side comparison file in meta
+        try:
+            # Load meta and merged raw values
+            with open(meta_dir / METADATA_FILENAME, "r", encoding="utf-8") as mf:
+                meta_obj = json.load(mf)
+            with open(merged_path, "r", encoding="utf-8") as mg:
+                merged_obj = json.load(mg)
+
+            fio_meta_raw = meta_obj.get("fio") if isinstance(meta_obj, dict) else None
+            fio_extracted_raw = merged_obj.get("fio") if isinstance(merged_obj, dict) else None
+
+            doc_type_meta_raw = meta_obj.get("doc_type") if isinstance(meta_obj, dict) else None
+            doc_type_extracted_raw = merged_obj.get("doc_type") if isinstance(merged_obj, dict) else None
+
+            doc_date_extracted = merged_obj.get("doc_date") if isinstance(merged_obj, dict) else None
+            # compute valid until = parsed(doc_date) + 30 days in UTC+5
+            def _parse_doc_date_v(s: Any):
+                if not isinstance(s, str):
+                    return None
+                s2 = s.strip()
+                for fmt in ("%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y"):
+                    try:
+                        return datetime.strptime(s2, fmt)
+                    except Exception:
+                        continue
+                return None
+
+            d = _parse_doc_date_v(doc_date_extracted)
+            valid_until_iso = None
+            if d is not None:
+                d_local = d.replace(tzinfo=timezone(timedelta(hours=5)))
+                valid_until_iso = (d_local + timedelta(days=30)).isoformat()
+
+            single_doc_type_raw = merged_obj.get("single_doc_type") if isinstance(merged_obj, dict) else None
+
+            side_by_side = {
+                "fio": {
+                    "meta": fio_meta_raw,
+                    "extracted": fio_extracted_raw,
+                },
+                "doc_type": {
+                    "meta": doc_type_meta_raw,
+                    "extracted": doc_type_extracted_raw,
+                },
+                "doc_date": {
+                    "extracted": doc_date_extracted,
+                    "valid_until": valid_until_iso,
+                },
+                "single_doc_type": {
+                    "extracted": single_doc_type_raw,
+                },
+            }
+            _write_json(meta_dir / "side_by_side.json", side_by_side)
+        except Exception:
+            pass
     except Exception as e:
         errors.append(make_error("MERGE_FAILED", details=str(e)))
         final_path = meta_dir / "final_result.json"
         result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
-        _write_json(meta_dir / "manifest.json", {
-            "run_id": run_id,
-            "created_at": datetime.now().isoformat(),
-            "user_input": {"fio": fio or None, "reason": reason, "doc_type": doc_type},
-            "file": {
+        _write_manifest(
+            meta_dir,
+            run_id=run_id,
+            user_input={"fio": fio or None, "reason": reason, "doc_type": doc_type},
+            file_info={
                 "original_filename": original_filename,
                 "saved_path": str(saved_path),
                 "content_type": content_type,
                 "size_bytes": size_bytes,
             },
-            "processing": {"ocr_engine": "textract"},
-            "status": "error",
-            "error": "MERGE_FAILED",
-            "final_result_path": str(final_path),
-        })
+            artifacts={"final_result_path": str(final_path)},
+            status="error",
+            error="MERGE_FAILED",
+        )
         return result
 
     # Validation
@@ -463,37 +513,27 @@ def run_pipeline(
             merged_path=str(artifacts.get("gpt_merged_path", "")),
             output_dir=str(gpt_dir),
             filename=VALIDATION_FILENAME,
+            write_file=False,
         )
-        artifacts["validation_path"] = str(gpt_dir / VALIDATION_FILENAME)
+        # validation file is suppressed; no artifacts path
         if not validation.get("success"):
             errors.append(make_error("VALIDATION_FAILED", details=str(validation.get("error"))))
             final_path = meta_dir / "final_result.json"
             result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
-            _write_json(meta_dir / "manifest.json", {
-                "run_id": run_id,
-                "created_at": datetime.now().isoformat(),
-                "user_input": {"fio": fio or None, "reason": reason, "doc_type": doc_type},
-                "file": {
+            _write_manifest(
+                meta_dir,
+                run_id=run_id,
+                user_input={"fio": fio or None, "reason": reason, "doc_type": doc_type},
+                file_info={
                     "original_filename": original_filename,
                     "saved_path": str(saved_path),
                     "content_type": content_type,
                     "size_bytes": size_bytes,
                 },
-                "processing": {
-                    "ocr_engine": "textract",
-                    "ocr_raw_path": str(ocr_dir / TEXTRACT_RAW),
-                    "ocr_pages_filtered_path": str(artifacts.get("ocr_pages_filtered_path", "")),
-                    "gpt_doc_type_check_filtered_path": artifacts.get("gpt_doc_type_check_filtered_path", ""),
-                    "gpt_doc_type_check_path": artifacts.get("gpt_doc_type_check_path", ""),
-                    "gpt_extractor_raw_path": artifacts.get("gpt_extractor_raw_path", ""),
-                    "gpt_extractor_filtered_path": artifacts.get("gpt_extractor_filtered_path", ""),
-                    "gpt_merged_path": artifacts.get("gpt_merged_path", ""),
-                    "validation_path": artifacts.get("validation_path", ""),
-                },
-                "status": "error",
-                "error": "VALIDATION_FAILED",
-                "final_result_path": str(final_path),
-            })
+                artifacts={"final_result_path": str(final_path), "gpt_merged_path": artifacts.get("gpt_merged_path", "")},
+                status="error",
+                error="VALIDATION_FAILED",
+            )
             return result
 
         val_result = validation.get("result", {})
@@ -517,60 +557,43 @@ def run_pipeline(
         final_path = meta_dir / "final_result.json"
         result = _build_final(run_id, errors, verdict=verdict, checks=checks, artifacts=artifacts, final_path=final_path)
 
-        manifest = {
-            "run_id": run_id,
-            "created_at": datetime.now().isoformat(),
-            "user_input": {"fio": fio or None, "reason": reason, "doc_type": doc_type},
-            "file": {
+        _write_manifest(
+            meta_dir,
+            run_id=run_id,
+            user_input={"fio": fio or None, "reason": reason, "doc_type": doc_type},
+            file_info={
                 "original_filename": original_filename,
                 "saved_path": str(saved_path),
                 "content_type": content_type,
                 "size_bytes": size_bytes,
             },
-            "processing": {
-                "ocr_engine": "textract",
-                "ocr_raw_path": str(ocr_dir / TEXTRACT_RAW),
-                "ocr_pages_filtered_path": str(artifacts.get("ocr_pages_filtered_path", "")),
-                "gpt_doc_type_check_filtered_path": artifacts.get("gpt_doc_type_check_filtered_path", ""),
-                "gpt_doc_type_check_path": artifacts.get("gpt_doc_type_check_path", ""),
-                "gpt_extractor_raw_path": artifacts.get("gpt_extractor_raw_path", ""),
-                "gpt_extractor_filtered_path": artifacts.get("gpt_extractor_filtered_path", ""),
+            artifacts={
+                "final_result_path": str(final_path),
                 "gpt_merged_path": artifacts.get("gpt_merged_path", ""),
-                "validation_path": artifacts.get("validation_path", ""),
             },
-            "status": "success",
-            "error": None,
-            "final_result_path": str(final_path),
-        }
-        _write_json(meta_dir / "manifest.json", manifest)
+            status="success",
+            error=None,
+        )
         return result
     except Exception as e:
         errors.append(make_error("VALIDATION_FAILED", details=str(e)))
         final_path = meta_dir / "final_result.json"
         result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
-        _write_json(meta_dir / "manifest.json", {
-            "run_id": run_id,
-            "created_at": datetime.now().isoformat(),
-            "user_input": {"fio": fio or None, "reason": reason, "doc_type": doc_type},
-            "file": {
+        _write_manifest(
+            meta_dir,
+            run_id=run_id,
+            user_input={"fio": fio or None, "reason": reason, "doc_type": doc_type},
+            file_info={
                 "original_filename": original_filename,
                 "saved_path": str(saved_path),
                 "content_type": content_type,
                 "size_bytes": size_bytes,
             },
-            "processing": {
-                "ocr_engine": "textract",
-                "ocr_raw_path": str(ocr_dir / TEXTRACT_RAW),
-                "ocr_pages_filtered_path": str(artifacts.get("ocr_pages_filtered_path", "")),
-                "gpt_doc_type_check_filtered_path": artifacts.get("gpt_doc_type_check_filtered_path", ""),
-                "gpt_doc_type_check_path": artifacts.get("gpt_doc_type_check_path", ""),
-                "gpt_extractor_raw_path": artifacts.get("gpt_extractor_raw_path", ""),
-                "gpt_extractor_filtered_path": artifacts.get("gpt_extractor_filtered_path", ""),
+            artifacts={
+                "final_result_path": str(final_path),
                 "gpt_merged_path": artifacts.get("gpt_merged_path", ""),
-                "validation_path": artifacts.get("validation_path", ""),
             },
-            "status": "error",
-            "error": "VALIDATION_FAILED",
-            "final_result_path": str(final_path),
-        })
+            status="error",
+            error="VALIDATION_FAILED",
+        )
         return result

@@ -105,7 +105,7 @@ def latin_to_cyrillic(s: str) -> str:
     })
     return s.translate(table)
 
-def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: str = VALIDATION_FILENAME) -> Dict[str, Any]:
+def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: str = VALIDATION_FILENAME, write_file: bool = True) -> Dict[str, Any]:
     try:
         with open(meta_path, "r", encoding="utf-8") as mf:
             meta = json.load(mf)
@@ -214,6 +214,8 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
         "diagnostics": diagnostics,
     }
 
+    if not write_file:
+        return {"success": True, "error": None, "validation_path": "", "result": result}
     try:
         os.makedirs(output_dir, exist_ok=True)
         out_path = os.path.join(output_dir, filename)
