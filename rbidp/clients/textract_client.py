@@ -51,7 +51,7 @@ def call_fortebank_textract(pdf_path: str, ocr_engine: str = "textract") -> str:
  
     return result
 
-def ask_textract(pdf_path: str, output_dir: str = "output", save_json: bool = True, ocr_engine: str = "tesseract") -> dict:
+def ask_textract(pdf_path: str, output_dir: str = "output", save_json: bool = True) -> dict:
     work_path = pdf_path
     converted_pdf: Optional[str] = None
     mt, _ = mimetypes.guess_type(pdf_path)
@@ -63,7 +63,7 @@ def ask_textract(pdf_path: str, output_dir: str = "output", save_json: bool = Tr
         desired_path = os.path.join(base_dir, f"{base_name}_converted.pdf")
         converted_pdf = convert_image_to_pdf(pdf_path, output_path=desired_path)
         work_path = converted_pdf
-    raw = call_fortebank_textract(work_path, ocr_engine=ocr_engine)
+    raw = call_fortebank_textract(work_path)
     os.makedirs(output_dir, exist_ok=True)
     raw_path = os.path.join(output_dir, "textract_response_raw.json")
     if save_json:
