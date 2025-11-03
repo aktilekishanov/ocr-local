@@ -1,89 +1,12 @@
 import os
 import re
 import json
-from datetime import datetime
-from pathlib import Path
-import uuid
 import tempfile
+from pathlib import Path
 import streamlit as st
 
-from rbidp.clients.textract_client import ask_textract
-from rbidp.processors.filter_textract_response import filter_textract_response
-from rbidp.processors.filter_gpt_generic_response import filter_gpt_generic_response
-from rbidp.processors.agent_extractor import extract_doc_data
-from rbidp.processors.agent_doc_type_checker import check_single_doc_type
-from rbidp.processors.merge_outputs import merge_extractor_and_doc_type
-from rbidp.processors.validator import validate_run
-from rbidp.core.config import (
-    TEXTRACT_RAW,
-    TEXTRACT_PAGES,
-    GPT_DOC_TYPE_RAW,
-    GPT_DOC_TYPE_FILTERED,
-    GPT_EXTRACTOR_RAW,
-    GPT_EXTRACTOR_FILTERED,
-    MERGED_FILENAME,
-    VALIDATION_FILENAME,
-    METADATA_FILENAME,
-)
 from rbidp.orchestrator import run_pipeline
 from rbidp.core.errors import message_for
-try:
-    import pypdf as _pypdf
-except Exception:
-    _pypdf = None
-try:
-    import PyPDF2 as _pypdf2
-except Exception:
-    _pypdf2 = None
-
-
-def run_gpt_extractor(pages_obj: dict, gpt_dir: Path) -> dict:
-    try:
-        gpt_raw = extract_doc_data(pages_obj)
-        raw_path = gpt_dir / GPT_EXTRACTOR_RAW
-        try:
-            with open(raw_path, "w", encoding="utf-8") as gf:
-                gf.write(gpt_raw)
-        except Exception:
-            pass
-        return {"success": True, "error": None, "raw_path": str(raw_path), "raw": gpt_raw}
-    except Exception as e:
-        return {"success": False, "error": str(e), "raw_path": "", "raw": ""}
-
-
-def run_filter_gpt(raw_path: str, gpt_dir: Path) -> dict:
-    try:
-        filtered_path = filter_gpt_generic_response(str(raw_path), str(gpt_dir), filename=GPT_EXTRACTOR_FILTERED)
-        with open(filtered_path, "r", encoding="utf-8") as ff:
-            filtered_obj = json.load(ff)
-        return {"success": True, "error": None, "filtered_path": filtered_path, "obj": filtered_obj}
-    except Exception as e:
-        try:
-            with open(raw_path, "r", encoding="utf-8") as rf:
-                raw_str = rf.read()
-            try:
-                raw_obj = json.loads(raw_str)
-                return {"success": False, "error": str(e), "filtered_path": "", "obj": raw_obj, "raw": raw_str}
-            except Exception:
-                return {"success": False, "error": str(e), "filtered_path": "", "obj": None, "raw": raw_str}
-        except Exception:
-            return {"success": False, "error": str(e), "filtered_path": "", "obj": None, "raw": ""}
-
-
-def run_doc_type_checker(pages_obj: dict, gpt_dir: Path) -> dict:
-    try:
-        raw = check_single_doc_type(pages_obj)
-        raw_path = gpt_dir / GPT_DOC_TYPE_RAW
-        try:
-            with open(raw_path, "w", encoding="utf-8") as f:
-                f.write(raw)
-        except Exception:
-            pass
-        # Do not attempt to parse here; Forte GPT may return multiple JSON objects (e.g. "{}\n{}")
-        return {"success": True, "error": None, "raw_path": str(raw_path), "raw": raw}
-    except Exception as e:
-        return {"success": False, "error": str(e), "raw_path": "", "raw": ""}
-
 
 # --- Page setup ---
 st.set_page_config(page_title="RB Loan Deferment IDP", layout="centered")
@@ -208,22 +131,22 @@ if submitted:
     elif doc_type == "Выберите тип документа":
         st.warning("Пожалуйста, выберите тип документа")
     else:
-        # Save uploaded file to a temporary location and call orchestrator once
-        tmp_dir = tempfile.mkdtemp(prefix="upload_")
-        tmp_path = Path(tmp_dir) / _safe_filename(uploaded_file.name)
-        with open(tmp_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
+        # Save uploaded file to a temporary location (auto-cleaned) and call orchestrator once
+        with tempfile.TemporaryDirectory(prefix="upload_") as tmp_dir:
+            tmp_path = Path(tmp_dir) / _safe_filename(uploaded_file.name)
+            with open(tmp_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
 
-        with st.spinner("Обрабатываем документ..."):
-            result = run_pipeline(
-                fio=fio or None,
-                reason=reason,
-                doc_type=doc_type,
-                source_file_path=str(tmp_path),
-                original_filename=uploaded_file.name,
-                content_type=getattr(uploaded_file, "type", None),
-                runs_root=RUNS_DIR,
-            )
+            with st.spinner("Обрабатываем документ..."):
+                result = run_pipeline(
+                    fio=fio or None,
+                    reason=reason,
+                    doc_type=doc_type,
+                    source_file_path=str(tmp_path),
+                    original_filename=uploaded_file.name,
+                    content_type=getattr(uploaded_file, "type", None),
+                    runs_root=RUNS_DIR,
+                )
 
         st.subheader("Результат проверки")
         verdict = bool(result.get("verdict", False))
@@ -239,11 +162,7 @@ if submitted:
             for e in errors:
                 code = e.get("code")
                 msg = message_for(code) or e.get("message") or str(code)
-                details = e.get("details")
-                if details:
-                    st.write(f"- {msg} — {details}")
-                else:
-                    st.write(f"- {msg}")
+                st.write(f"- {msg}")
 
         # Diagnostics: show final_result.json for full context
         final_result_path = result.get("final_result_path")
@@ -251,7 +170,35 @@ if submitted:
             try:
                 with open(final_result_path, "r", encoding="utf-8") as ff:
                     final_obj = json.load(ff)
-                with st.expander("Диагностика: final_results.json"):
+                with st.expander("Диагностика: final_result.json"):
                     st.json(final_obj)
             except Exception:
                 pass
+
+        # Side-by-side comparison (if available)
+        if isinstance(final_result_path, str):
+            sbs_path = os.path.join(os.path.dirname(final_result_path), "side_by_side.json")
+            if os.path.exists(sbs_path):
+                try:
+                    with open(sbs_path, "r", encoding="utf-8") as sbf:
+                        side_by_side = json.load(sbf)
+                    with st.expander("Сравнение: side_by_side.json"):
+                        # Compact table for quick review
+                        rows = []
+                        try:
+                            rows = [
+                                {"Поле": "ФИО (meta)", "Значение": side_by_side.get("fio", {}).get("meta")},
+                                {"Поле": "ФИО (extracted)", "Значение": side_by_side.get("fio", {}).get("extracted")},
+                                {"Поле": "Тип документа (meta)", "Значение": side_by_side.get("doc_type", {}).get("meta")},
+                                {"Поле": "Тип документа (extracted)", "Значение": side_by_side.get("doc_type", {}).get("extracted")},
+                                {"Поле": "Дата документа (extracted)", "Значение": side_by_side.get("doc_date", {}).get("extracted")},
+                                {"Поле": "Действителен до", "Значение": side_by_side.get("doc_date", {}).get("valid_until")},
+                                {"Поле": "Один тип документа", "Значение": side_by_side.get("single_doc_type", {}).get("extracted")},
+                            ]
+                        except Exception:
+                            rows = []
+                        if rows:
+                            st.table(rows)
+                        st.json(side_by_side)
+                except Exception:
+                    pass

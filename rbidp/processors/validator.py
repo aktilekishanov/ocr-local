@@ -1,10 +1,11 @@
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import os
 from typing import Dict, Any
 import re
 from rapidfuzz import fuzz  
 from rbidp.core.config import VALIDATION_FILENAME
+from rbidp.core.dates import parse_doc_date, now_utc_plus
 
 VALIDATION_MESSAGES = {
     "checks": {
@@ -40,22 +41,8 @@ def _norm_text(s: Any) -> str:
     return s.casefold()
 
 
-def _parse_doc_date(s: Any):
-    if not isinstance(s, str):
-        return None
-    s = s.strip()
-    fmts = ["%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y"]
-    for f in fmts:
-        try:
-            return datetime.strptime(s, f)
-        except Exception:
-            continue
-    return None
-
-
 def _now_utc_plus_5():
-    tz = timezone(timedelta(hours=5))
-    return datetime.now(tz)
+    return now_utc_plus(5)
 
 def kz_to_ru(s: str) -> str:
     table = str.maketrans({
@@ -155,12 +142,12 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
     else:
         doc_type_match = None
 
-    d = _parse_doc_date(doc_date_raw)
+    d = parse_doc_date(doc_date_raw)
     now = _now_utc_plus_5()
     if d is None:
         doc_date_valid = None
     else:
-        d_local = d.replace(tzinfo=timezone(timedelta(hours=5)))
+        d_local = d.replace(tzinfo=now.tzinfo)
         doc_date_valid = now <= (d_local + timedelta(days=30))
 
     if isinstance(single_doc_type_raw, bool):
@@ -175,7 +162,12 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
         "single_doc_type_valid": single_doc_type_valid,
     }
 
-    verdict = all(checks.values())
+    verdict = (
+        checks.get("fio_match") is True
+        and checks.get("doc_type_match") is True
+        and checks.get("doc_date_valid") is True
+        and checks.get("single_doc_type_valid") is True
+    )
 
     diagnostics = {
         "inputs": {
@@ -218,9 +210,5 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
         return {"success": True, "error": None, "validation_path": "", "result": result}
     try:
         os.makedirs(output_dir, exist_ok=True)
-        out_path = os.path.join(output_dir, filename)
-        with open(out_path, "w", encoding="utf-8") as vf:
-            json.dump(result, vf, ensure_ascii=False, indent=2)
-        return {"success": True, "error": None, "validation_path": out_path, "result": result}
     except Exception as e:
-        return {"success": False, "error": f"Write error: {e}", "validation_path": "", "result": result}
+        return {"success": False, "error": f"Validation error: {e}", "validation_path": "", "result": None}

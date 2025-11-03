@@ -18,3 +18,7 @@ VALIDATION_FILENAME = "validation.json"
 
 # User-provided metadata
 METADATA_FILENAME = "metadata.json"
+
+# Global settings
+MAX_PDF_PAGES = 3
+UTC_OFFSET_HOURS = 5

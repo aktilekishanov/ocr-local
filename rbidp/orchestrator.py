@@ -3,6 +3,7 @@ import re
 import json
 import uuid
 import shutil
+import logging
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
@@ -16,7 +17,6 @@ from rbidp.processors.merge_outputs import merge_extractor_and_doc_type
 from rbidp.processors.validator import validate_run
 from rbidp.core.errors import make_error
 from rbidp.core.config import (
-    TEXTRACT_RAW,
     TEXTRACT_PAGES,
     GPT_DOC_TYPE_RAW,
     GPT_DOC_TYPE_FILTERED,
@@ -25,7 +25,13 @@ from rbidp.core.config import (
     MERGED_FILENAME,
     VALIDATION_FILENAME,
     METADATA_FILENAME,
+    MAX_PDF_PAGES,
+    UTC_OFFSET_HOURS,
 )
+from rbidp.core.dates import parse_doc_date
+
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_filename(name: str) -> str:
@@ -40,8 +46,8 @@ def _count_pdf_pages(path: str) -> Optional[int]:
         try:
             reader = _pypdf.PdfReader(path)
             return len(reader.pages)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("pypdf reader failed: %s", e, exc_info=True)
     except Exception:
         pass
     try:
@@ -205,7 +211,7 @@ def run_pipeline(
 
     if saved_path.suffix.lower() == ".pdf":
         pages = _count_pdf_pages(str(saved_path))
-        if pages is not None and pages > 3:
+        if pages is not None and pages > MAX_PDF_PAGES:
             errors.append(make_error("PDF_TOO_MANY_PAGES"))
             final_path = meta_dir / "final_result.json"
             result = _build_final(run_id, errors, verdict=False, checks=None, artifacts=artifacts, final_path=final_path)
@@ -303,8 +309,8 @@ def run_pipeline(
         dtc_filtered_path = filter_gpt_generic_response(str(dtc_raw_path), str(gpt_dir), filename=GPT_DOC_TYPE_FILTERED)
         try:
             os.remove(dtc_raw_path)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to remove dtc_raw_path: %s", e, exc_info=True)
         artifacts["gpt_doc_type_check_filtered_path"] = str(dtc_filtered_path)
         with open(dtc_filtered_path, "r", encoding="utf-8") as f:
             dtc_obj = json.load(f)
@@ -376,8 +382,8 @@ def run_pipeline(
         filtered_path = filter_gpt_generic_response(str(gpt_raw_path), str(gpt_dir), filename=GPT_EXTRACTOR_FILTERED)
         try:
             os.remove(gpt_raw_path)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to remove gpt_raw_path: %s", e, exc_info=True)
         artifacts["gpt_extractor_filtered_path"] = str(filtered_path)
         with open(filtered_path, "r", encoding="utf-8") as f:
             filtered_obj = json.load(f)
@@ -453,23 +459,12 @@ def run_pipeline(
             doc_type_extracted_raw = merged_obj.get("doc_type") if isinstance(merged_obj, dict) else None
 
             doc_date_extracted = merged_obj.get("doc_date") if isinstance(merged_obj, dict) else None
-            # compute valid until = parsed(doc_date) + 30 days in UTC+5
-            def _parse_doc_date_v(s: Any):
-                if not isinstance(s, str):
-                    return None
-                s2 = s.strip()
-                for fmt in ("%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y"):
-                    try:
-                        return datetime.strptime(s2, fmt)
-                    except Exception:
-                        continue
-                return None
-
-            d = _parse_doc_date_v(doc_date_extracted)
-            valid_until_iso = None
+            # compute valid until = parsed(doc_date) + 30 days in configured timezone; output dd.mm.yyyy
+            d = parse_doc_date(doc_date_extracted)
+            valid_until_str = None
             if d is not None:
-                d_local = d.replace(tzinfo=timezone(timedelta(hours=5)))
-                valid_until_iso = (d_local + timedelta(days=30)).isoformat()
+                d_local = d.replace(tzinfo=timezone(timedelta(hours=UTC_OFFSET_HOURS)))
+                valid_until_str = (d_local + timedelta(days=30)).strftime("%d.%m.%Y")
 
             single_doc_type_raw = merged_obj.get("single_doc_type") if isinstance(merged_obj, dict) else None
 
@@ -484,7 +479,7 @@ def run_pipeline(
                 },
                 "doc_date": {
                     "extracted": doc_date_extracted,
-                    "valid_until": valid_until_iso,
+                    "valid_until": valid_until_str,
                 },
                 "single_doc_type": {
                     "extracted": single_doc_type_raw,
