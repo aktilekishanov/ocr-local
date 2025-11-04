@@ -28,7 +28,7 @@ from rbidp.core.config import (
     MAX_PDF_PAGES,
     UTC_OFFSET_HOURS,
 )
-from rbidp.core.dates import parse_doc_date
+from rbidp.core.validity import compute_valid_until, format_date
 
 
 logger = logging.getLogger(__name__)
@@ -402,6 +402,11 @@ def run_pipeline(
             v = filtered_obj[k]
             if v is not None and not isinstance(v, str):
                 raise ValueError(f"Key {k} has invalid type")
+        # optional field valid_until
+        if "valid_until" in filtered_obj:
+            vu = filtered_obj.get("valid_until")
+            if vu is not None and not isinstance(vu, str):
+                raise ValueError("Key valid_until has invalid type")
     except ValueError as ve:
         errors.append(make_error("EXTRACT_SCHEMA_INVALID", details=str(ve)))
         final_path = meta_dir / "final_result.json"
@@ -467,12 +472,12 @@ def run_pipeline(
             doc_type_extracted_raw = merged_obj.get("doc_type") if isinstance(merged_obj, dict) else None
 
             doc_date_extracted = merged_obj.get("doc_date") if isinstance(merged_obj, dict) else None
-            # compute valid until = parsed(doc_date) + 30 days in configured timezone; output dd.mm.yyyy
-            d = parse_doc_date(doc_date_extracted)
-            valid_until_str = None
-            if d is not None:
-                d_local = d.replace(tzinfo=timezone(timedelta(hours=UTC_OFFSET_HOURS)))
-                valid_until_str = (d_local + timedelta(days=30)).strftime("%d.%m.%Y")
+            valid_until_extracted_raw = merged_obj.get("valid_until") if isinstance(merged_obj, dict) else None
+            # compute policy-based valid_until and format
+            vu_dt, _, _, _ = compute_valid_until(
+                doc_type_extracted_raw, doc_date_extracted, valid_until_extracted_raw
+            )
+            valid_until_str = format_date(vu_dt)
 
             single_doc_type_raw = merged_obj.get("single_doc_type") if isinstance(merged_obj, dict) else None
 

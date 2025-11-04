@@ -1,11 +1,11 @@
 import json
-from datetime import datetime, timedelta
 import os
 from typing import Dict, Any
 import re
 from rapidfuzz import fuzz  
 from rbidp.core.config import VALIDATION_FILENAME
-from rbidp.core.dates import parse_doc_date, now_utc_plus
+from rbidp.core.dates import now_utc_plus
+from rbidp.core.validity import compute_valid_until, is_within_validity, format_date
 
 VALIDATION_MESSAGES = {
     "checks": {
@@ -118,6 +118,7 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
     doc_class_raw = merged.get("doc_type") if isinstance(merged, dict) else None
     doc_class = _norm_text(doc_class_raw)
     doc_date_raw = merged.get("doc_date") if isinstance(merged, dict) else None
+    valid_until_raw = merged.get("valid_until") if isinstance(merged, dict) else None
     single_doc_type_raw = merged.get("single_doc_type") if isinstance(merged, dict) else None
 
     score_before = None
@@ -143,13 +144,11 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
     else:
         doc_type_match = None
 
-    d = parse_doc_date(doc_date_raw)
     now = _now_utc_plus_5()
-    if d is None:
-        doc_date_valid = None
-    else:
-        d_local = d.replace(tzinfo=now.tzinfo)
-        doc_date_valid = now <= (d_local + timedelta(days=30))
+    valid_until_dt, policy_type, policy_days, policy_error = compute_valid_until(
+        doc_class_raw, doc_date_raw, valid_until_raw
+    )
+    doc_date_valid = is_within_validity(valid_until_dt, now)
 
     if isinstance(single_doc_type_raw, bool):
         single_doc_type_valid = single_doc_type_raw
@@ -177,6 +176,7 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
             "doc_type_meta": doc_type_meta_raw,
             "doc_type": doc_class_raw,
             "doc_date": doc_date_raw,
+            "valid_until": valid_until_raw,
             "single_doc_type": single_doc_type_raw,
         },
         "normalization": {
@@ -191,8 +191,10 @@ def validate_run(meta_path: str, merged_path: str, output_dir: str, filename: st
         },
         "timing": {
             "now_utc_plus_5": now.isoformat(),
-            "doc_date_parsed": d.isoformat() if d else None,
-            "validity_window_days": 30,
+            "effective_valid_until": format_date(valid_until_dt),
+            "policy_type": policy_type,
+            "validity_window_days": policy_days,
+            "policy_error": policy_error,
         },
         "checks": checks,
         "messages": {

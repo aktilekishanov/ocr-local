@@ -28,9 +28,11 @@ You must extract the following information:
   - "Лица, зарегистрированные в качестве безработных"
   - null
 - doc_date: main issuance date (convert to format DD.MM.YYYY)
+- valid_until: string | null — for "Приказ о выходе в декретный отпуск по уходу за ребенком" extract the end date (DD.MM.YYYY) if the document states a period like «с DD.MM.YYYY … по DD.MM.YYYY»; otherwise null. For all other document types, set null.
 
 STEP 2 — EXTRACTION RULES
 - If several dates exist, choose the main issuance date (usually near header or "№").
+- For the decree order, if a validity period is stated, set valid_until to the last date of that period; otherwise null.
 - Ignore duplicates or minor typos.
 - When the value is missing, set it strictly to `null`.
 - Do not invent or assume missing data.
@@ -45,7 +47,8 @@ STEP 3 — THINK BEFORE ANSWERING
 Double-check:
 - Is fio complete (Фамилия Имя Отчество)?
 - Is doc_date formatted as DD.MM.YYYY?
-- Are there exactly 3 keys in the final JSON?
+- Is valid_until either DD.MM.YYYY or null?
+- Are there exactly 4 keys in the final JSON?
 - Is doc_type one of the allowed options or null?
 
 STEP 4 — OUTPUT STRICTLY IN THIS JSON FORMAT (no explanations, no extra text, no Markdown formatting, and no ```json formatting)
@@ -53,6 +56,7 @@ STEP 4 — OUTPUT STRICTLY IN THIS JSON FORMAT (no explanations, no extra text, 
   "fio": string | null,
   "doc_type": string | null,
   "doc_date": string | null,
+  "valid_until": string | null,
 }
 
 Text for analysis:
